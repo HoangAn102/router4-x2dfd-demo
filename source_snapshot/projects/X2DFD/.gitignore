@@ -1,0 +1,56 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*.pyo
+.ipynb_checkpoints/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual env / tooling
+.env
+.venv/
+venv/
+.idea/
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Large outputs and datasets
+eval/outputs/
+train/outputs/
+logs/
+results/
+tmp*
+datasets/raw/images/
+script/
+
+# Weights and checkpoints (recommend Git LFS or local)
+weights/
+*.bin
+*.h5
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+
+# Logs
+*.log
+
+# Trainers/trackers (optional)
+wandb/
+lightning_logs/
+runs/
+mlruns/
+
+# Build / packaging
+build/
+dist/
+*.egg-info/
+
+# Local caches (optional under repo)
+.cache/
+hf_cache/
+transformers_cache/

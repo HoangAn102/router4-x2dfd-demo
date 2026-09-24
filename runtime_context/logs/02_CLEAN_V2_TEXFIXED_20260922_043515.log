@@ -1,0 +1,443 @@
+
+================================================================================
+A. HARD PREFLIGHT
+Tue Sep 22 04:35:15 UTC 2026
+================================================================================
+/home/aiotlab/miniconda3/envs/X2DFD/lib/python3.10/site-packages/torch/cuda/__init__.py:51: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+torch = 2.1.2+cu121
+cuda = True
+gpu = NVIDIA A40
+PyYAML = OK
+Pillow = OK
+NVIDIA A40, 46068 MiB, 44720 MiB
+
+================================================================================
+B. FREEZE SOFTWARE + MODEL PROVENANCE
+Tue Sep 22 04:35:17 UTC 2026
+================================================================================
+
+================================================================================
+C. BUILD OFFICIAL FROZEN MANIFEST
+Tue Sep 22 04:35:19 UTC 2026
+================================================================================
+JSON TEMPLATE = /home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/schema_template/PROVEN_X2DFD_TEMPLATE.json
+IMAGE KEY = image_path
+IMAGE LIST PATH = ('images',)
+TEMPLATE ITEMS = 1
+[2-CROSS] DFDC intentionally excluded: 0 videos / 0 frames
+X2 JSON READY: /home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/work/Celeb-DF-v2_test.json N= 16420
+X2 JSON READY: /home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/work/DFDCP_test.json N= 17222
+X2 JSON READY: /home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/work/DFDC_test.json N= 0
+{
+  "protocol_name": "DeepfakeBench-compatible cross-data evaluation",
+  "evaluation_unit_input": "preprocessed face frames",
+  "sampling": {
+    "middle_frame": false,
+    "random": false,
+    "resampled_after_download": false,
+    "duplicated_to_32": false,
+    "frame_source": "all available official preprocessed PNG frames",
+    "maximum_expected_frames_per_video": 32
+  },
+  "split_sources": {
+    "Celeb-DF-v2_test_list": {
+      "path": "/home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/eval_shadow/Celeb-DF-v2/List_of_testing_videos.txt",
+      "sha256": "07063d46206e011aef9d1ad8d1854f5b87ae519ba6e452b897cc528c3dcfcdc0"
+    },
+    "DFDCP_dataset_json": {
+      "path": "/home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/eval_shadow/DFDCP/dataset.json",
+      "sha256": "fbe738fb58e5a21d1b0b6c7801e72b80ec8ad08d80243c40221c539d0b77f668"
+    },
+    "DFDC_labels_csv": {
+      "path": "/home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/eval_shadow/DFDC/test/labels.csv",
+      "sha256": "7cf8f5dc1ff13bf03227d9be75150b0fcfbedb3080cb7917a5d882f4367397bf"
+    }
+  },
+  "dataset_stats": {
+    "Celeb-DF-v2": {
+      "videos": 518,
+      "frames": 16420,
+      "real_videos": 178,
+      "fake_videos": 340,
+      "frames_per_video_distribution": {
+        "3": 1,
+        "13": 1,
+        "17": 2,
+        "21": 1,
+        "26": 2,
+        "27": 2,
+        "28": 1,
+        "29": 3,
+        "30": 3,
+        "31": 26,
+        "32": 476
+      },
+      "min_frames": 3,
+      "max_frames": 32
+    },
+    "DFDCP": {
+      "videos": 654,
+      "frames": 17222,
+      "real_videos": 230,
+      "fake_videos": 424,
+      "frames_per_video_distribution": {
+        "1": 14,
+        "2": 8,
+        "3": 3,
+        "4": 3,
+        "5": 6,
+        "6": 7,
+        "7": 6,
+        "8": 5,
+        "9": 4,
+        "10": 11,
+        "11": 9,
+        "12": 4,
+        "13": 6,
+        "14": 6,
+        "15": 5,
+        "16": 7,
+        "17": 9,
+        "18": 14,
+        "19": 7,
+        "20": 11,
+        "21": 6,
+        "22": 6,
+        "23": 4,
+        "24": 11,
+        "25": 7,
+        "26": 8,
+        "27": 20,
+        "28": 15,
+        "29": 20,
+        "30": 31,
+        "31": 42,
+        "32": 339
+      },
+      "min_frames": 1,
+      "max_frames": 32
+    }
+  },
+  "zero_frame_official_videos": [],
+  "json_template": {
+    "path": "/home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/schema_template/PROVEN_X2DFD_TEMPLATE.json",
+    "image_list_path": [
+      "images"
+    ]
+  },
+  "official_video_counts_seen": {
+    "Celeb-DF-v2": 518,
+    "DFDCP": 654,
+    "DFDC": 0
+  },
+  "total_usable_frames": 33642,
+  "notes": [
+    "No middle-frame-only protocol.",
+    "No random evaluation sampling.",
+    "No duplication of frames.",
+    "Videos with fewer than 32 valid preprocessed frames retain all valid frames.",
+    "Any video with more than 32 PNG frames causes a hard failure.",
+    "Both models will receive the exact same frozen image manifest."
+  ]
+}
+
+TOTAL USABLE FRAMES = 33642
+ZERO-FRAME VIDEOS = 0
+
+================================================================================
+D. FREEZE MANIFEST + METADATA
+Tue Sep 22 04:35:23 UTC 2026
+================================================================================
+a756e9f09fd2ee7f03c200d8dd35b072206327db03476048b7f0118b91e37606  /home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/work/manifest.csv
+5ba1eefe196d4e35cbcbb3e63f4bf40b2cf7a08873dbd495819822762df2e19f  /home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/protocol/labels_and_video_ids.csv
+cac98d4222206a51e9d819e90203157240df5ec29f9921b6dadef06bf7ec46ad  /home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/protocol/PROTOCOL_LOCK.json
+b8468ebecbff92779dc6ca9296079c59faf4e447d099828f887edfeaa5eb104c  /home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/work/Celeb-DF-v2_test.json
+c493007f98c60d723cda3ca3d5ad916bc25ac60b3dde36a2feb053fd4b7f443a  /home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/work/DFDCP_test.json
+5c12e242d1b559889678b82f411c880af094abd4cb8272f8231628d338eddcc3  /home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/work/DFDC_test.json
+FROZEN FRAME COUNT = 33642
+
+================================================================================
+E. EXACT-PATH TRAIN/TEST LEAKAGE
+Tue Sep 22 04:35:24 UTC 2026
+================================================================================
+{
+  "train_unique": 254121,
+  "test_unique": 33642,
+  "exact_path_overlap": 0,
+  "examples": []
+}
+
+================================================================================
+F. START DECODED-RGB LEAKAGE AUDIT
+Tue Sep 22 04:35:38 UTC 2026
+================================================================================
+HASH AUDIT PID = 4159086
+
+================================================================================
+G. BUILD SMOKE SET
+Tue Sep 22 04:35:38 UTC 2026
+================================================================================
+SMOKE ROWS = 8
+
+================================================================================
+H1. SMOKE BLENDING
+Tue Sep 22 04:35:38 UTC 2026
+================================================================================
+/home/aiotlab/miniconda3/envs/X2DFD/lib/python3.10/site-packages/torch/cuda/__init__.py:51: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+
+======================================================================
+BLENDING -> FFPP_X2DFD32
+======================================================================
+TOTAL   : 8
+DONE    : 8
+PENDING : 0
+
+BLENDING FINAL: 8 / 8
+CSV: /home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/smoke/work/blending_scores.csv
+
+================================================================================
+H2. SMOKE DIFFUSION
+Tue Sep 22 04:35:40 UTC 2026
+================================================================================
+/home/aiotlab/miniconda3/envs/X2DFD/lib/python3.10/site-packages/torch/cuda/__init__.py:51: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+
+======================================================================
+DIFFUSION -> FFPP_X2DFD32
+======================================================================
+TOTAL   : 8
+DONE    : 8
+PENDING : 0
+
+DIFFUSION FINAL: 8 / 8
+CSV: /home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/smoke/work/diffusion_scores.csv
+
+================================================================================
+H3. SMOKE FREQUENCY
+Tue Sep 22 04:35:41 UTC 2026
+================================================================================
+
+======================================================================
+FREQUENCY -> PAPER_SMOKE
+======================================================================
+TOTAL   : 8
+DONE    : 8
+PENDING : 0
+
+FINAL: 8 / 8
+CSV: /home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/smoke/work/frequency_scores.csv
+
+================================================================================
+H4. SMOKE TEXTURE
+Tue Sep 22 04:35:45 UTC 2026
+================================================================================
+
+======================================================================
+TEXTURE -> FFPP_X2DFD32
+======================================================================
+TOTAL   : 8
+DONE    : 8
+PENDING : 0
+
+TEXTURE FINAL: 8 / 8
+CSV: /home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/smoke/work/texture_scores.csv
+✅ FOUR EXPERT SMOKE PASS
+
+================================================================================
+J. ROUTER CACHE SMOKE
+Tue Sep 22 04:35:46 UTC 2026
+================================================================================
+PATCHED CACHE BUILDER = /home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/smoke/build_router_cache.py
+/home/aiotlab/miniconda3/envs/X2DFD/lib/python3.10/site-packages/torch/cuda/__init__.py:51: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+blending scores = 8
+diffusion scores = 8
+frequency scores = 8
+texture scores = 8
+FINAL CALIBRATOR SOURCE = root['experts']
+FINAL CALIBRATOR TYPES = {'blending': 'sklearn.isotonic.IsotonicRegression', 'diffusion': 'sklearn.isotonic.IsotonicRegression', 'frequency': 'sklearn.isotonic.IsotonicRegression', 'texture': 'sklearn.isotonic.IsotonicRegression'}
+
+==========================================================================================
+FULL ROUTER-MOE CACHE
+==========================================================================================
+Expected = 8
+Cache    = 8
+Missing  = 0
+
+ROUTE DISTRIBUTION
+blending    50.00%
+diffusion    0.00%
+frequency   12.50%
+texture     37.50%
+
+Mean confidence = 0.3073
+Mean margin     = 0.0375
+
+ROUTER CACHE READY ✅
+✅ ROUTER SMOKE PASS
+
+================================================================================
+K. PREPARE INFERENCE CONFIG TEMPLATE
+Tue Sep 22 04:36:30 UTC 2026
+================================================================================
+===== FINAL INPUT MATERIALIZATION =====
+✅ X2DFD schema:
+   IMAGE LIST PATH = ('images',)
+   IMAGE KEY       = image_path
+   TEMPLATE ITEMS  = 1
+
+MANIFEST DISTRIBUTION = {'Celeb-DF-v2': 4, 'DFDCP': 4}
+UNIQUE IMAGES         = 8
+✅ full_inputs.json                 rows= 8 sha256=ef960d6668be0f4e
+
+DRIVER-REFERENCED SMOKE JSONS = ['Celeb-DF-v2_smoke.json', 'DFDCP_smoke.json']
+✅ Celeb-DF-v2_smoke.json           rows= 4 sha256=2f75c6ba24dee16f
+✅ DFDCP_smoke.json                 rows= 4 sha256=b48b165cf22050b3
+
+==========================================================
+✅✅ INPUT MATERIALIZATION PASS ✅✅
+==========================================================
+full_inputs rows = 8
+datasets         = {'Celeb-DF-v2': 4, 'DFDCP': 4}
+DFDC             = 0
+schema           = proven template
+==========================================================
+✅ FINAL INPUT MATERIALIZATION PASS
+ORIGINAL:
+/home/aiotlab/hoangan/projects/X2DFD/eval/configs/infer_full_DFDCP_DFDC_original.yaml
+
+ROUTER-MOE:
+/home/aiotlab/hoangan/projects/X2DFD/eval/configs/infer_full_DFDCP_DFDC_router_moe.yaml
+
+FULL INPUTS:
+  Description
+  images
+
+CONFIGS READY ✅
+✅ canonical patch_config installed
+
+================================================================================
+M. BUILD SMOKE INPUT JSONS
+Tue Sep 22 04:36:30 UTC 2026
+================================================================================
+SMOKE JSON: Celeb-DF-v2 N= 4 key= image_path -> /home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/smoke/Celeb-DF-v2_smoke.json
+SMOKE JSON: DFDCP N= 4 key= image_path -> /home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/smoke/DFDCP_smoke.json
+
+================================================================================
+N. BUILD SMOKE CONFIGS
+Tue Sep 22 04:36:30 UTC 2026
+================================================================================
+PATCHER_SCHEMA = x2dfd-infer.inputs.images-2cross-v2
+PATCHED_CONFIG = /home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/smoke/original.yaml
+INPUTS = ['/home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/smoke/Celeb-DF-v2_smoke.json', '/home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/smoke/DFDCP_smoke.json']
+SOURCE_COUNTS = {'Celeb-DF-v2_smoke.json': 4, 'DFDCP_smoke.json': 4}
+TOTAL_IMAGES = 8
+2-CROSS CONFIG PASS ✅
+PATCHER_SCHEMA = x2dfd-infer.inputs.images-2cross-v2
+PATCHED_CONFIG = /home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/smoke/router4.yaml
+INPUTS = ['/home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/smoke/Celeb-DF-v2_smoke.json', '/home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/smoke/DFDCP_smoke.json']
+SOURCE_COUNTS = {'Celeb-DF-v2_smoke.json': 4, 'DFDCP_smoke.json': 4}
+TOTAL_IMAGES = 8
+ROUTER_CACHE = /home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/smoke/work/router_moe_cache.csv
+2-CROSS CONFIG PASS ✅
+CACHE ALIGN PASS ✅
+rows                = 8
+same image set      = YES
+order before equal  = False
+order after equal   = YES
+row content changed = NO
+cache               = /home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/smoke/work/router_moe_cache.csv
+audit               = /home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/cache_alignment_audit/smoke_runtime_alignment.json
+PAIR_CHECK PASS mode=smoke-runtime images=8
+router_cache = /home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/smoke/work/router_moe_cache.csv
+DFDC = 0
+2-CROSS INPUT PASS ✅
+Celeb-DF-v2 = 4
+DFDCP       = 4
+DFDC        = 0
+TOTAL       = 8
+JSON        = /home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/smoke/FULL_2CROSS_INPUT.json
+SHA256      = ac8968597143be8d67a27bbe04028d5cf31cdad3bed2b3d0e43e638173a6e614
+
+================================================================================
+Q. ORIGINAL X2DFD SMOKE INFERENCE
+Tue Sep 22 04:36:31 UTC 2026
+================================================================================
+/home/aiotlab/miniconda3/envs/X2DFD/lib/python3.10/site-packages/torch/cuda/__init__.py:51: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+Experts:   0%|                                            | 0/2 [00:00<?, ?it/s]--- Initializing BlendingDetector: Loading Model from weights/blending_models/best_gf.pth ---
+/home/aiotlab/miniconda3/envs/X2DFD/lib/python3.10/site-packages/torch/functional.py:504: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3526.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+--- BlendingDetector Initialized Successfully ---
+
+Blending Detector Inference (bs=128):   0%|          | 0/1 [00:00<?, ?it/s][A
+Blending Detector Inference (bs=128): 100%|██████████| 1/1 [00:00<00:00,  1.92it/s][ABlending Detector Inference (bs=128): 100%|██████████| 1/1 [00:00<00:00,  1.75it/s]
+Experts:  50%|██████████████████                  | 1/2 [00:04<00:04,  4.44s/it]normalize RESNET
+
+Diffusion[ours-sync] (bs=32):   0%|                       | 0/1 [00:00<?, ?it/s][A
+Diffusion[ours-sync] (bs=32): 100%|███████████████| 1/1 [00:00<00:00,  1.12it/s][A
+                                                                                [AExperts: 100%|████████████████████████████████████| 2/2 [00:06<00:00,  3.07s/it]                                                                                LoRA Inference:   0%|                                     | 0/8 [00:00<?, ?it/s]Loading LLaVA from base model...
+
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s][A
+Loading checkpoint shards:  50%|█████     | 1/2 [00:01<00:01,  1.92s/it][A
+Loading checkpoint shards: 100%|██████████| 2/2 [00:02<00:00,  1.17s/it][ALoading checkpoint shards: 100%|██████████| 2/2 [00:02<00:00,  1.28s/it]
+Loading additional LLaVA weights...
+Loading LoRA weights...
+Merging LoRA weights...
+Model is loaded...
+/home/aiotlab/miniconda3/envs/X2DFD/lib/python3.10/site-packages/transformers/generation/configuration_utils.py:392: UserWarning: `do_sample` is set to `False`. However, `temperature` is set to `0.0` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `temperature`.
+  warnings.warn(
+LoRA Inference:  12%|███▋                         | 1/8 [00:08<00:58,  8.35s/it]LoRA Inference:  25%|███████▎                     | 2/8 [00:08<00:21,  3.64s/it]LoRA Inference:  38%|██████████▉                  | 3/8 [00:09<00:10,  2.13s/it]LoRA Inference:  50%|██████████████▌              | 4/8 [00:09<00:05,  1.42s/it]LoRA Inference:  62%|██████████████████▏          | 5/8 [00:09<00:03,  1.03s/it]LoRA Inference:  75%|█████████████████████▊       | 6/8 [00:10<00:01,  1.26it/s]LoRA Inference:  88%|█████████████████████████▍   | 7/8 [00:10<00:00,  1.56it/s]LoRA Inference: 100%|█████████████████████████████| 8/8 [00:10<00:00,  1.85it/s]LoRA Inference: 100%|█████████████████████████████| 8/8 [00:10<00:00,  1.33s/it]
+Saved conversation-style results: /home/aiotlab/hoangan/projects/X2DFD/eval/outputs/infer/runs/infer_20260922T043633Z/datasets/FULL_2CROSS_INPUT_result.json
+Run info saved to: /home/aiotlab/hoangan/projects/X2DFD/eval/outputs/infer/runs/infer_20260922T043633Z/infer_info.json
+REFERENCED = 6
+COPIED = 16
+{
+  "contract": "continuous final MLLM REAL/FAKE probability pair",
+  "hard_text_conversion": false,
+  "expert_score_substitution": false,
+  "json_files_scanned": 17,
+  "conversation_result_files_found": 1,
+  "complete_result_files": 1,
+  "result_files": [
+    {
+      "file": "/home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/snapshots/smoke_original/artifacts/__home__aiotlab__hoangan__projects__X2DFD__eval__outputs__infer__runs__infer_20260922T043633Z__datasets__FULL_2CROSS_INPUT_result.json",
+      "records": 8,
+      "valid_score_pairs": 8,
+      "complete": true,
+      "failures": []
+    }
+  ],
+  "pass": true
+}
+✅ ORIGINAL SMOKE + TOKEN SCORE PASS
+
+================================================================================
+R. ROUTER4 FINAL SMOKE INFERENCE
+Tue Sep 22 04:36:51 UTC 2026
+================================================================================
+/home/aiotlab/miniconda3/envs/X2DFD/lib/python3.10/site-packages/torch/cuda/__init__.py:51: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+Experts:   0%|                                            | 0/1 [00:00<?, ?it/s]                                                                                Traceback (most recent call last):
+  File "/home/aiotlab/miniconda3/envs/X2DFD/lib/python3.10/runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/home/aiotlab/miniconda3/envs/X2DFD/lib/python3.10/runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "/home/aiotlab/hoangan/projects/X2DFD/eval/infer/runner.py", line 659, in <module>
+    main()
+  File "/home/aiotlab/hoangan/projects/X2DFD/eval/infer/runner.py", line 517, in main
+    items = _build_conversations_multi(payload, experts_cfg=weak_multi)
+  File "/home/aiotlab/hoangan/projects/X2DFD/eval/infer/runner.py", line 249, in _build_conversations_multi
+    score_map = compute_all_scores(experts, abs_paths)
+  File "/home/aiotlab/hoangan/projects/X2DFD/utils/model_scoring.py", line 375, in compute_all_scores
+    prov = get_provider(ex.provider, **(ex.kwargs or {}))
+  File "/home/aiotlab/hoangan/projects/X2DFD/utils/model_scoring.py", line 341, in get_provider
+    raise KeyError(f"Unknown score provider: {name}. Available: {list(_REGISTRY)}")
+KeyError: "Unknown score provider: router_moe_cache. Available: ['blending', 'forensics', 'aligner', 'diffusion', 'diffusion_detector', 'diffdet']"
+
+[ERROR]
+stage=R. ROUTER4 FINAL SMOKE INFERENCE
+line=3282
+exit=1

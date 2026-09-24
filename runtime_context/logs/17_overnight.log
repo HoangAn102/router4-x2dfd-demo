@@ -1,0 +1,36 @@
+
+================================================================================
+A. HARD PREFLIGHT
+Sun Sep 20 08:28:50 PM UTC 2026
+================================================================================
+/home/aiotlab/miniconda3/envs/X2DFD/lib/python3.10/site-packages/torch/cuda/__init__.py:51: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+torch = 2.1.2+cu121
+cuda = True
+gpu = NVIDIA A40
+PyYAML = OK
+Pillow = OK
+NVIDIA A40, 46068 MiB, 44720 MiB
+
+================================================================================
+B. FREEZE SOFTWARE + MODEL PROVENANCE
+Sun Sep 20 08:28:52 PM UTC 2026
+================================================================================
+
+================================================================================
+C. BUILD OFFICIAL FROZEN MANIFEST
+Sun Sep 20 08:28:54 PM UTC 2026
+================================================================================
+JSON TEMPLATE = /home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_3CROSS_V3_2/schema_template/PROVEN_X2DFD_TEMPLATE.json
+IMAGE KEY = image_path
+IMAGE LIST PATH = ('images',)
+TEMPLATE ITEMS = 1
+Traceback (most recent call last):
+  File "<stdin>", line 783, in <module>
+  File "<stdin>", line 45, in find_one
+RuntimeError: Expected exactly one labels.csv under /home/aiotlab/hoangan/datasets/CROSSDATA_FINAL_EVAL/DFDC; found 0: []
+
+[ERROR]
+stage=C. BUILD OFFICIAL FROZEN MANIFEST
+line=259
+exit=1

@@ -1,0 +1,13 @@
+
+# conda environments:
+#
+# * -> active
+# + -> frozen
+base                 *   /home/aiotlab/miniconda3
+DFFreq                   /home/aiotlab/miniconda3/envs/DFFreq
+FFPPCrop                 /home/aiotlab/miniconda3/envs/FFPPCrop
+GramDownload             /home/aiotlab/miniconda3/envs/GramDownload
+TextureExpert            /home/aiotlab/miniconda3/envs/TextureExpert
+X2DFD                    /home/aiotlab/miniconda3/envs/X2DFD
+hfdownload               /home/aiotlab/miniconda3/envs/hfdownload
+

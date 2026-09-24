@@ -1,0 +1,545 @@
+
+================================================================================
+0. HARD PREFLIGHT
+Sun Sep 20 07:55:00 PM UTC 2026
+================================================================================
+✅ model artifacts
+✅ expert runtimes
+✅ all three extracted cross-datasets
+
+================================================================================
+1. BUILD OFFICIAL TEST MANIFEST
+Sun Sep 20 07:55:00 PM UTC 2026
+================================================================================
+Traceback (most recent call last):
+  File "<stdin>", line 192, in <module>
+RuntimeError: DFDCP frame directory ambiguous/missing: method_A/1441897/1441897_A/1848521_1441897_A_003.mp4 -> []
+[ERROR] line=137 exit=1 command="$PY_X2" - "$DATA" "$MANIFEST" "$LABELS" "$CELEB_JSON" "$DFDCP_JSON" "$DFDC_JSON" "$PROTO/PROTOCOL_LOCK.json" <<'PY'
+from pathlib import Path
+from collections import Counter
+import csv
+import json
+import sys
+import hashlib
+
+(
+    DATA,
+    MANIFEST,
+    LABELS,
+    CELEB_JSON,
+    DFDCP_JSON,
+    DFDC_JSON,
+    LOCK_JSON,
+) = map(Path, sys.argv[1:])
+
+IMG_EXT = {".png"}
+
+records = []
+missing_videos = []
+protocol = {}
+
+
+def images_in(d):
+    if not d.is_dir():
+        return []
+    return sorted(
+        p.resolve()
+        for p in d.iterdir()
+        if p.is_file() and p.suffix.lower() in IMG_EXT
+    )
+
+
+def add(dataset, video_id, label, frames, source):
+    if not frames:
+        missing_videos.append(
+            {
+                "dataset": dataset,
+                "video_id": video_id,
+                "source": source,
+            }
+        )
+        return
+
+    for p in frames:
+        records.append(
+            {
+                "dataset": dataset,
+                "video_id": video_id,
+                "label_text": label,
+                "image_path": str(p),
+                "source_metadata": source,
+            }
+        )
+
+
+# =============================================================================
+# CELEB-DF-v2
+# =============================================================================
+
+root = DATA / "Celeb-DF-v2"
+
+test_list = root / "List_of_testing_videos.txt"
+
+if not test_list.is_file():
+    candidates = []
+    for p in root.rglob("*.txt"):
+        try:
+            txt = p.read_text(errors="ignore")
+        except Exception:
+            continue
+        n = sum(".mp4" in x.lower() for x in txt.splitlines())
+        if n:
+            candidates.append((n, p))
+
+    if not candidates:
+        raise RuntimeError(
+            "Celeb-DF-v2 official testing-video list not found"
+        )
+
+    candidates.sort(reverse=True, key=lambda x: x[0])
+    test_list = candidates[0][1]
+
+celeb_videos = 0
+
+for line in test_list.read_text(errors="ignore").splitlines():
+    line = line.strip()
+
+    if not line or ".mp4" not in line.lower():
+        continue
+
+    toks = line.split()
+
+    rel = next(
+        (x for x in toks if x.lower().endswith(".mp4")),
+        None
+    )
+
+    if rel is None:
+        continue
+
+    relp = Path(rel)
+    category = relp.parent.name
+    vid = relp.stem
+
+    if category in {"Celeb-real", "YouTube-real"}:
+        label = "real"
+    elif category == "Celeb-synthesis":
+        label = "fake"
+    else:
+        raise RuntimeError(
+            f"Unknown Celeb category in official list: {line}"
+        )
+
+    frame_dir = root / category / "frames" / vid
+    frames = images_in(frame_dir)
+
+    add(
+        "Celeb-DF-v2",
+        vid,
+        label,
+        frames,
+        f"{test_list}:{rel}",
+    )
+
+    celeb_videos += 1
+
+if celeb_videos < 100:
+    raise RuntimeError(
+        f"Suspicious Celeb test-video count: {celeb_videos}"
+    )
+
+
+# =============================================================================
+# DFDCP
+# Official DeepfakeBench rearrangement:
+# dataset.json -> label + set; only set=test.
+# =============================================================================
+
+root = DATA / "DFDCP"
+meta = root / "dataset.json"
+
+if not meta.is_file():
+    candidates = list(root.rglob("dataset.json"))
+
+    if len(candidates) != 1:
+        raise RuntimeError(
+            f"DFDCP dataset.json unresolved: {candidates}"
+        )
+
+    meta = candidates[0]
+
+obj = json.loads(meta.read_text(errors="ignore"))
+
+dfdcp_videos = 0
+
+for key, info in obj.items():
+    if not isinstance(info, dict):
+        continue
+
+    split = str(info.get("set", "")).lower()
+
+    if split != "test":
+        continue
+
+    label = str(info.get("label", "")).lower()
+
+    if label not in {"real", "fake"}:
+        raise RuntimeError(
+            f"Invalid DFDCP label: {key} -> {label}"
+        )
+
+    path = Path(key)
+    index = path.parts[0]
+    vid = path.stem
+
+    frame_dir = root / index / "frames" / vid
+
+    if not frame_dir.is_dir():
+        # strict unique fallback, still only under a directory named frames
+        hits = [
+            p
+            for p in root.rglob(vid)
+            if p.is_dir()
+            and p.parent.name == "frames"
+        ]
+
+        if len(hits) == 1:
+            frame_dir = hits[0]
+        else:
+            raise RuntimeError(
+                f"DFDCP frame directory ambiguous/missing: "
+                f"{key} -> {hits}"
+            )
+
+    frames = images_in(frame_dir)
+
+    add(
+        "DFDCP",
+        f"{index}/{vid}",
+        label,
+        frames,
+        f"{meta}:{key}",
+    )
+
+    dfdcp_videos += 1
+
+if dfdcp_videos < 10:
+    raise RuntimeError(
+        f"Suspicious DFDCP test-video count: {dfdcp_videos}"
+    )
+
+
+# =============================================================================
+# DFDC
+# Official DeepfakeBench rearrangement uses test/labels.csv.
+# =============================================================================
+
+root = DATA / "DFDC"
+
+label_csv_candidates = [
+    root / "test" / "labels.csv",
+    root / "labels.csv",
+]
+
+label_csv = next(
+    (p for p in label_csv_candidates if p.is_file()),
+    None,
+)
+
+if label_csv is None:
+    hits = list(root.rglob("labels.csv"))
+
+    if len(hits) != 1:
+        raise RuntimeError(
+            f"DFDC labels.csv unresolved: {hits}"
+        )
+
+    label_csv = hits[0]
+
+with label_csv.open(
+    "r",
+    encoding="utf-8",
+    errors="ignore",
+    newline=""
+) as f:
+    rows = list(csv.DictReader(f))
+
+if not rows:
+    raise RuntimeError("DFDC labels.csv empty")
+
+fields = rows[0].keys()
+
+filename_col = next(
+    (
+        c for c in fields
+        if c.lower() in {"filename", "file", "video", "video_name"}
+    ),
+    None,
+)
+
+label_col = next(
+    (
+        c for c in fields
+        if c.lower() in {"label", "class", "target"}
+    ),
+    None,
+)
+
+if filename_col is None or label_col is None:
+    raise RuntimeError(
+        f"DFDC labels schema unsupported: {list(fields)}"
+    )
+
+dfdc_videos = 0
+
+for r in rows:
+    filename = str(r[filename_col]).strip()
+    raw_label = str(r[label_col]).strip().lower()
+
+    if raw_label in {"real", "0", "false"}:
+        label = "real"
+    elif raw_label in {"fake", "1", "true"}:
+        label = "fake"
+    else:
+        raise RuntimeError(
+            f"Unrecognized DFDC label: {filename} -> {raw_label}"
+        )
+
+    vid = Path(filename).stem
+
+    direct = label_csv.parent / "frames" / vid
+
+    if direct.is_dir():
+        frame_dir = direct
+    else:
+        hits = [
+            p
+            for p in root.rglob(vid)
+            if p.is_dir()
+            and p.parent.name == "frames"
+        ]
+
+        if len(hits) != 1:
+            raise RuntimeError(
+                f"DFDC frame directory ambiguous/missing: "
+                f"{filename} -> {hits[:10]}"
+            )
+
+        frame_dir = hits[0]
+
+    frames = images_in(frame_dir)
+
+    add(
+        "DFDC",
+        vid,
+        label,
+        frames,
+        f"{label_csv}:{filename}",
+    )
+
+    dfdc_videos += 1
+
+if dfdc_videos < 10:
+    raise RuntimeError(
+        f"Suspicious DFDC test-video count: {dfdc_videos}"
+    )
+
+
+# =============================================================================
+# GLOBAL GATES
+# =============================================================================
+
+if not records:
+    raise RuntimeError("Empty benchmark manifest")
+
+seen = {}
+duplicates = []
+
+for r in records:
+    p = r["image_path"]
+
+    if p in seen:
+        duplicates.append((p, seen[p], r))
+    else:
+        seen[p] = r
+
+if duplicates:
+    raise RuntimeError(
+        f"Duplicate image paths in benchmark: {len(duplicates)}"
+    )
+
+for r in records:
+    if not Path(r["image_path"]).is_file():
+        raise RuntimeError(
+            f"Missing image: {r['image_path']}"
+        )
+
+counts_images = Counter(r["dataset"] for r in records)
+video_sets = {}
+
+for ds in ["Celeb-DF-v2", "DFDCP", "DFDC"]:
+    vids = {
+        r["video_id"]
+        for r in records
+        if r["dataset"] == ds
+    }
+
+    video_sets[ds] = len(vids)
+
+    if not vids:
+        raise RuntimeError(
+            f"No test videos for {ds}"
+        )
+
+frame_distribution = {}
+
+for ds in ["Celeb-DF-v2", "DFDCP", "DFDC"]:
+    by_video = Counter()
+
+    for r in records:
+        if r["dataset"] == ds:
+            by_video[r["video_id"]] += 1
+
+    dist = Counter(by_video.values())
+
+    frame_distribution[ds] = {
+        str(k): v
+        for k, v in sorted(dist.items())
+    }
+
+
+# =============================================================================
+# WRITE THREE X2DFD INPUT JSONS
+# =============================================================================
+
+json_map = {
+    "Celeb-DF-v2": CELEB_JSON,
+    "DFDCP": DFDCP_JSON,
+    "DFDC": DFDC_JSON,
+}
+
+for ds, out in json_map.items():
+    imgs = [
+        {"image_path": r["image_path"]}
+        for r in records
+        if r["dataset"] == ds
+    ]
+
+    payload = {
+        "Description": str(DATA / ds),
+        "images": imgs,
+    }
+
+    out.write_text(
+        json.dumps(payload, indent=2),
+        encoding="utf-8",
+    )
+
+
+# =============================================================================
+# WRITE EXPERT MANIFEST
+# Keep json field because old integration tooling uses provenance JSON.
+# =============================================================================
+
+with MANIFEST.open(
+    "w",
+    encoding="utf-8",
+    newline=""
+) as f:
+    fieldnames = [
+        "json",
+        "image_path",
+        "dataset",
+        "video_id",
+        "label_text",
+    ]
+
+    w = csv.DictWriter(
+        f,
+        fieldnames=fieldnames,
+    )
+
+    w.writeheader()
+
+    for r in records:
+        w.writerow(
+            {
+                "json": str(json_map[r["dataset"]]),
+                "image_path": r["image_path"],
+                "dataset": r["dataset"],
+                "video_id": r["video_id"],
+                "label_text": r["label_text"],
+            }
+        )
+
+
+with LABELS.open(
+    "w",
+    encoding="utf-8",
+    newline=""
+) as f:
+    fieldnames = [
+        "dataset",
+        "video_id",
+        "label_text",
+        "image_path",
+        "source_metadata",
+    ]
+
+    w = csv.DictWriter(
+        f,
+        fieldnames=fieldnames,
+    )
+
+    w.writeheader()
+    w.writerows(records)
+
+
+lock = {
+    "protocol": (
+        "DeepfakeBench-style official test metadata; "
+        "use all locally available preprocessed PNG frames "
+        "for every official test video; no resampling"
+    ),
+    "no_middle_frame": True,
+    "no_random_sampling": True,
+    "no_duplicate_to_32": True,
+    "datasets": {
+        ds: {
+            "frames": counts_images[ds],
+            "videos": video_sets[ds],
+            "frames_per_video_distribution":
+                frame_distribution[ds],
+        }
+        for ds in [
+            "Celeb-DF-v2",
+            "DFDCP",
+            "DFDC",
+        ]
+    },
+    "missing_zero_frame_videos": missing_videos,
+    "sources": {
+        "Celeb-DF-v2": str(test_list),
+        "DFDCP": str(meta),
+        "DFDC": str(label_csv),
+    },
+}
+
+LOCK_JSON.write_text(
+    json.dumps(lock, indent=2),
+    encoding="utf-8",
+)
+
+print(json.dumps(lock, indent=2))
+
+print()
+print("TOTAL FRAMES =", len(records))
+print("MISSING/ZERO-FRAME VIDEOS =", len(missing_videos))
+
+if missing_videos:
+    print(
+        "NOTE: zero-frame videos are recorded in PROTOCOL_LOCK.json; "
+        "no artificial replacement/duplication was performed."
+    )
+PY
+

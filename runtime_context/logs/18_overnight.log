@@ -1,0 +1,914 @@
+
+================================================================================
+A. HARD PREFLIGHT
+Sun Sep 20 08:11:20 PM UTC 2026
+================================================================================
+/home/aiotlab/miniconda3/envs/X2DFD/lib/python3.10/site-packages/torch/cuda/__init__.py:51: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+torch = 2.1.2+cu121
+cuda = True
+gpu = NVIDIA A40
+PyYAML = OK
+Pillow = OK
+NVIDIA A40, 46068 MiB, 44720 MiB
+
+================================================================================
+B. FREEZE SOFTWARE + MODEL PROVENANCE
+Sun Sep 20 08:11:23 PM UTC 2026
+================================================================================
+
+================================================================================
+C. BUILD OFFICIAL FROZEN MANIFEST
+Sun Sep 20 08:11:25 PM UTC 2026
+================================================================================
+Traceback (most recent call last):
+  File "<stdin>", line 167, in <module>
+RuntimeError: Could not find a known local X2DFD input JSON template. Refusing to invent inference JSON schema.
+
+[ERROR]
+line=252
+exit=1
+command="$PY_X2" - "$DATA" "$BASE/datasets/CROSSDATA_X2DFD_DOWNLOAD" "$MANIFEST" "$LABELS" "$LOCK" "$CELEB_JSON" "$DFDCP_JSON" "$DFDC_JSON" <<'PYMAN'
+
+from pathlib import Path
+from collections import Counter, defaultdict
+import csv
+import hashlib
+import json
+import sys
+import copy
+
+(
+    DATA,
+    TEMPLATE_ROOT,
+    MANIFEST,
+    LABELS,
+    LOCK,
+    CELEB_JSON,
+    DFDCP_JSON,
+    DFDC_JSON,
+) = map(Path, sys.argv[1:])
+
+
+###############################################################################
+# HELPERS
+###############################################################################
+
+def sha256(path):
+    h = hashlib.sha256()
+
+    with path.open("rb") as f:
+        while True:
+            b = f.read(8 * 1024 * 1024)
+
+            if not b:
+                break
+
+            h.update(b)
+
+    return h.hexdigest()
+
+
+def find_one(root, filename):
+    hits = list(root.rglob(filename))
+
+    if len(hits) != 1:
+        raise RuntimeError(
+            f"Expected exactly one {filename} under {root}; "
+            f"found {len(hits)}: {hits[:20]}"
+        )
+
+    return hits[0]
+
+
+def frames(frame_dir):
+    if not frame_dir.is_dir():
+        return []
+
+    result = sorted(
+        p.resolve()
+        for p in frame_dir.iterdir()
+        if p.is_file()
+        and p.suffix.lower() == ".png"
+    )
+
+    # We intentionally follow DeepfakeBench's *png convention.
+    others = [
+        p
+        for p in frame_dir.iterdir()
+        if p.is_file()
+        and p.suffix.lower()
+        in {".jpg", ".jpeg", ".webp", ".bmp"}
+    ]
+
+    if not result and others:
+        raise RuntimeError(
+            f"{frame_dir} contains image files but no PNG frames. "
+            "Refusing to silently change DeepfakeBench protocol."
+        )
+
+    if len(result) > 32:
+        raise RuntimeError(
+            f"{frame_dir} contains {len(result)} PNG frames (>32). "
+            "This does not match the expected preprocessed benchmark layout."
+        )
+
+    return result
+
+
+###############################################################################
+# DISCOVER A KNOWN X2DFD INPUT JSON TEMPLATE
+#
+# We do not invent runner JSON schema.
+# We clone the shape of an existing local X2DFD cross-data JSON.
+###############################################################################
+
+def find_image_list(obj, path=()):
+    out = []
+
+    if isinstance(obj, list):
+        score = sum(
+            isinstance(x, dict)
+            and "image_path" in x
+            for x in obj
+        )
+
+        if score:
+            out.append((score, path))
+
+        for i, x in enumerate(obj[:10]):
+            out.extend(
+                find_image_list(
+                    x,
+                    path + (i,),
+                )
+            )
+
+    elif isinstance(obj, dict):
+        for k, v in obj.items():
+            out.extend(
+                find_image_list(
+                    v,
+                    path + (k,),
+                )
+            )
+
+    return out
+
+
+template_candidates = []
+
+if TEMPLATE_ROOT.exists():
+
+    for p in TEMPLATE_ROOT.rglob("*.json"):
+
+        try:
+            if p.stat().st_size > 200 * 1024 * 1024:
+                continue
+
+            txt = p.read_text(errors="ignore")
+
+            if '"image_path"' not in txt:
+                continue
+
+            obj = json.loads(txt)
+
+            candidates = find_image_list(obj)
+
+            if not candidates:
+                continue
+
+            best = max(candidates)
+
+            template_candidates.append(
+                (
+                    best[0],
+                    p.stat().st_size,
+                    p,
+                    obj,
+                    best[1],
+                )
+            )
+
+        except Exception:
+            continue
+
+
+if not template_candidates:
+    raise RuntimeError(
+        "Could not find a known local X2DFD input JSON template. "
+        "Refusing to invent inference JSON schema."
+    )
+
+
+template_candidates.sort(
+    key=lambda x: (x[0], x[1]),
+    reverse=True,
+)
+
+_, _, template_path, template_obj, image_list_path = \
+    template_candidates[0]
+
+
+print("JSON TEMPLATE =", template_path)
+print("IMAGE LIST PATH =", image_list_path)
+
+
+def set_path(obj, path, value):
+    cur = obj
+
+    for x in path[:-1]:
+        cur = cur[x]
+
+    cur[path[-1]] = value
+
+
+def make_x2_json(paths, output):
+    obj = copy.deepcopy(template_obj)
+
+    payload = [
+        {"image_path": str(p)}
+        for p in paths
+    ]
+
+    set_path(
+        obj,
+        image_list_path,
+        payload,
+    )
+
+    output.write_text(
+        json.dumps(
+            obj,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+
+###############################################################################
+# BUILD RECORDS
+###############################################################################
+
+records = []
+zero_frame = []
+
+
+def add(dataset, video_id, label, frame_paths, source):
+    if label not in {"real", "fake"}:
+        raise RuntimeError(
+            f"Invalid normalized label: {label}"
+        )
+
+    if not frame_paths:
+        zero_frame.append(
+            {
+                "dataset": dataset,
+                "video_id": video_id,
+                "source": source,
+            }
+        )
+
+        return
+
+    for p in frame_paths:
+        records.append(
+            {
+                "dataset": dataset,
+                "video_id": video_id,
+                "label_text": label,
+                "image_path": str(p),
+                "source_metadata": source,
+            }
+        )
+
+
+###############################################################################
+# CELEB-DF-v2
+###############################################################################
+
+celeb_meta = find_one(
+    DATA / "Celeb-DF-v2",
+    "List_of_testing_videos.txt",
+)
+
+celeb_root = celeb_meta.parent
+
+celeb_video_count = 0
+
+for raw_line in celeb_meta.read_text(
+    errors="ignore"
+).splitlines():
+
+    line = raw_line.strip()
+
+    if not line:
+        continue
+
+    tokens = line.split()
+
+    mp4 = next(
+        (
+            t
+            for t in tokens
+            if t.lower().endswith(".mp4")
+        ),
+        None,
+    )
+
+    if mp4 is None:
+        continue
+
+    rel = Path(mp4)
+
+    category = rel.parent.name
+    video_id = rel.stem
+
+    if category in {
+        "Celeb-real",
+        "YouTube-real",
+    }:
+        label = "real"
+
+    elif category == "Celeb-synthesis":
+        label = "fake"
+
+    else:
+        raise RuntimeError(
+            f"Unknown Celeb-DF-v2 category: {category}"
+        )
+
+    frame_dir = (
+        celeb_root
+        / category
+        / "frames"
+        / video_id
+    )
+
+    ff = frames(frame_dir)
+
+    add(
+        "Celeb-DF-v2",
+        video_id,
+        label,
+        ff,
+        f"{celeb_meta}:{mp4}",
+    )
+
+    celeb_video_count += 1
+
+
+if celeb_video_count < 100:
+    raise RuntimeError(
+        f"Suspicious Celeb-DF-v2 official test count: "
+        f"{celeb_video_count}"
+    )
+
+
+###############################################################################
+# DFDCP
+###############################################################################
+
+dfdcp_meta = find_one(
+    DATA / "DFDCP",
+    "dataset.json",
+)
+
+dfdcp_root = dfdcp_meta.parent
+
+dfdcp_info = json.loads(
+    dfdcp_meta.read_text(
+        errors="ignore"
+    )
+)
+
+if not isinstance(dfdcp_info, dict):
+    raise RuntimeError(
+        "DFDCP dataset.json top level is not a mapping"
+    )
+
+
+dfdcp_video_count = 0
+
+for dataset_key, info in dfdcp_info.items():
+
+    if not isinstance(info, dict):
+        continue
+
+    split = str(
+        info.get("set", "")
+    ).strip().lower()
+
+    if split != "test":
+        continue
+
+    raw_label = str(
+        info.get("label", "")
+    ).strip().lower()
+
+    if raw_label == "real":
+        label = "real"
+
+    elif raw_label == "fake":
+        label = "fake"
+
+    else:
+        raise RuntimeError(
+            f"Invalid DFDCP label: "
+            f"{dataset_key} -> {raw_label}"
+        )
+
+    parts = Path(dataset_key).parts
+
+    if len(parts) < 2:
+        raise RuntimeError(
+            f"Unexpected DFDCP dataset key: {dataset_key}"
+        )
+
+    index = parts[0]
+    video_id = Path(parts[-1]).stem
+
+    # DeepfakeBench official layout:
+    # <index>/frames/<video_id>/*.png
+    frame_dir = (
+        dfdcp_root
+        / index
+        / "frames"
+        / video_id
+    )
+
+    ff = frames(frame_dir)
+
+    add(
+        "DFDCP",
+        f"{index}/{video_id}",
+        label,
+        ff,
+        f"{dfdcp_meta}:{dataset_key}",
+    )
+
+    dfdcp_video_count += 1
+
+
+if dfdcp_video_count < 10:
+    raise RuntimeError(
+        f"Suspicious DFDCP test count: "
+        f"{dfdcp_video_count}"
+    )
+
+
+###############################################################################
+# DFDC
+###############################################################################
+
+dfdc_labels = find_one(
+    DATA / "DFDC",
+    "labels.csv",
+)
+
+if dfdc_labels.parent.name.lower() != "test":
+    raise RuntimeError(
+        f"DFDC labels.csv is not under test/: {dfdc_labels}"
+    )
+
+dfdc_root = dfdc_labels.parent
+
+with dfdc_labels.open(
+    "r",
+    encoding="utf-8",
+    errors="ignore",
+    newline="",
+) as f:
+
+    rows = list(
+        csv.DictReader(f)
+    )
+
+
+if not rows:
+    raise RuntimeError(
+        "DFDC labels.csv is empty"
+    )
+
+
+fields = rows[0].keys()
+
+filename_col = next(
+    (
+        x for x in fields
+        if x.lower()
+        in {
+            "filename",
+            "file",
+            "video",
+            "video_name",
+        }
+    ),
+    None,
+)
+
+label_col = next(
+    (
+        x for x in fields
+        if x.lower()
+        in {
+            "label",
+            "class",
+            "target",
+        }
+    ),
+    None,
+)
+
+
+if filename_col is None or label_col is None:
+    raise RuntimeError(
+        f"Unsupported DFDC labels schema: {list(fields)}"
+    )
+
+
+dfdc_video_count = 0
+
+for row in rows:
+
+    filename = str(
+        row[filename_col]
+    ).strip()
+
+    raw_label = str(
+        row[label_col]
+    ).strip()
+
+    # Official DeepfakeBench rearrange.py:
+    # labels = ['DFDC_Real', 'DFDC_Fake']
+    # label = labels[row['label']]
+    if raw_label == "0":
+        label = "real"
+
+    elif raw_label == "1":
+        label = "fake"
+
+    elif raw_label.upper() == "REAL":
+        label = "real"
+
+    elif raw_label.upper() == "FAKE":
+        label = "fake"
+
+    else:
+        raise RuntimeError(
+            f"Unsupported DFDC label value: "
+            f"{filename} -> {raw_label}"
+        )
+
+    video_id = Path(
+        filename
+    ).stem
+
+    frame_dir = (
+        dfdc_root
+        / "frames"
+        / video_id
+    )
+
+    ff = frames(frame_dir)
+
+    add(
+        "DFDC",
+        video_id,
+        label,
+        ff,
+        f"{dfdc_labels}:{filename}",
+    )
+
+    dfdc_video_count += 1
+
+
+if dfdc_video_count < 10:
+    raise RuntimeError(
+        f"Suspicious DFDC test count: "
+        f"{dfdc_video_count}"
+    )
+
+
+###############################################################################
+# GLOBAL MANIFEST GATES
+###############################################################################
+
+if not records:
+    raise RuntimeError(
+        "Benchmark manifest is empty"
+    )
+
+
+paths = [
+    r["image_path"]
+    for r in records
+]
+
+if len(paths) != len(set(paths)):
+    dup = len(paths) - len(set(paths))
+
+    raise RuntimeError(
+        f"Duplicate image paths in benchmark manifest: {dup}"
+    )
+
+
+for p in paths:
+    if not Path(p).is_file():
+        raise RuntimeError(
+            f"Missing benchmark frame: {p}"
+        )
+
+
+###############################################################################
+# FRAME-COUNT / LABEL DISTRIBUTIONS
+###############################################################################
+
+video_frames = defaultdict(int)
+video_labels = {}
+
+for r in records:
+
+    key = (
+        r["dataset"],
+        r["video_id"],
+    )
+
+    video_frames[key] += 1
+
+    old = video_labels.get(key)
+
+    if old is not None and old != r["label_text"]:
+        raise RuntimeError(
+            f"Conflicting labels for video {key}"
+        )
+
+    video_labels[key] = r["label_text"]
+
+
+dataset_stats = {}
+
+for ds in [
+    "Celeb-DF-v2",
+    "DFDCP",
+    "DFDC",
+]:
+
+    vf = {
+        vid: n
+        for (dataset, vid), n
+        in video_frames.items()
+        if dataset == ds
+    }
+
+    labels = Counter(
+        label
+        for (dataset, vid), label
+        in video_labels.items()
+        if dataset == ds
+    )
+
+    dist = Counter(
+        vf.values()
+    )
+
+    if not vf:
+        raise RuntimeError(
+            f"No usable videos for {ds}"
+        )
+
+    if max(vf.values()) > 32:
+        raise RuntimeError(
+            f"{ds} has a video with >32 frames"
+        )
+
+    dataset_stats[ds] = {
+        "videos": len(vf),
+        "frames": sum(vf.values()),
+        "real_videos": labels["real"],
+        "fake_videos": labels["fake"],
+        "frames_per_video_distribution": {
+            str(k): v
+            for k, v
+            in sorted(dist.items())
+        },
+        "min_frames": min(vf.values()),
+        "max_frames": max(vf.values()),
+    }
+
+
+###############################################################################
+# ZERO-FRAME GATE
+#
+# DeepfakeBench rearrange skips zero-frame DFDCP/DFDC videos.
+# We record them. If >1% of official test videos disappear, fail.
+###############################################################################
+
+official_total = (
+    celeb_video_count
+    + dfdcp_video_count
+    + dfdc_video_count
+)
+
+zero_fraction = (
+    len(zero_frame)
+    / official_total
+)
+
+if zero_fraction > 0.01:
+    raise RuntimeError(
+        f"Too many official test videos have zero usable frames: "
+        f"{len(zero_frame)}/{official_total} "
+        f"({100*zero_fraction:.3f}%)"
+    )
+
+
+###############################################################################
+# WRITE LABEL MANIFEST
+###############################################################################
+
+with LABELS.open(
+    "w",
+    encoding="utf-8",
+    newline="",
+) as f:
+
+    fieldnames = [
+        "dataset",
+        "video_id",
+        "label_text",
+        "image_path",
+        "source_metadata",
+    ]
+
+    w = csv.DictWriter(
+        f,
+        fieldnames=fieldnames,
+    )
+
+    w.writeheader()
+    w.writerows(records)
+
+
+###############################################################################
+# WRITE EXPERT MANIFEST
+###############################################################################
+
+with MANIFEST.open(
+    "w",
+    encoding="utf-8",
+    newline="",
+) as f:
+
+    fieldnames = [
+        "json",
+        "image_path",
+        "dataset",
+        "video_id",
+        "label_text",
+    ]
+
+    w = csv.DictWriter(
+        f,
+        fieldnames=fieldnames,
+    )
+
+    w.writeheader()
+
+    for r in records:
+
+        dataset_json = {
+            "Celeb-DF-v2": CELEB_JSON,
+            "DFDCP": DFDCP_JSON,
+            "DFDC": DFDC_JSON,
+        }[r["dataset"]]
+
+        w.writerow(
+            {
+                "json": str(dataset_json),
+                "image_path": r["image_path"],
+                "dataset": r["dataset"],
+                "video_id": r["video_id"],
+                "label_text": r["label_text"],
+            }
+        )
+
+
+###############################################################################
+# WRITE X2DFD JSONS USING EXISTING LOCAL TEMPLATE
+###############################################################################
+
+for ds, output in [
+    ("Celeb-DF-v2", CELEB_JSON),
+    ("DFDCP", DFDCP_JSON),
+    ("DFDC", DFDC_JSON),
+]:
+
+    pp = [
+        r["image_path"]
+        for r in records
+        if r["dataset"] == ds
+    ]
+
+    make_x2_json(
+        pp,
+        output,
+    )
+
+
+###############################################################################
+# METADATA HASHES
+###############################################################################
+
+metadata_hashes = {
+    "Celeb-DF-v2_test_list": {
+        "path": str(celeb_meta),
+        "sha256": sha256(celeb_meta),
+    },
+    "DFDCP_dataset_json": {
+        "path": str(dfdcp_meta),
+        "sha256": sha256(dfdcp_meta),
+    },
+    "DFDC_labels_csv": {
+        "path": str(dfdc_labels),
+        "sha256": sha256(dfdc_labels),
+    },
+}
+
+
+###############################################################################
+# FINAL PROTOCOL LOCK
+###############################################################################
+
+lock = {
+    "protocol_name":
+        "DeepfakeBench-compatible cross-data evaluation",
+
+    "evaluation_unit_input":
+        "preprocessed face frames",
+
+    "sampling": {
+        "middle_frame": False,
+        "random": False,
+        "resampled_after_download": False,
+        "duplicated_to_32": False,
+        "frame_source":
+            "all available official preprocessed PNG frames",
+        "maximum_expected_frames_per_video": 32,
+    },
+
+    "split_sources": metadata_hashes,
+
+    "dataset_stats": dataset_stats,
+
+    "zero_frame_official_videos": zero_frame,
+
+    "json_template": {
+        "path": str(template_path),
+        "image_list_path": [
+            str(x)
+            for x in image_list_path
+        ],
+    },
+
+    "official_video_counts_seen": {
+        "Celeb-DF-v2": celeb_video_count,
+        "DFDCP": dfdcp_video_count,
+        "DFDC": dfdc_video_count,
+    },
+
+    "total_usable_frames": len(records),
+
+    "notes": [
+        "No middle-frame-only protocol.",
+        "No random evaluation sampling.",
+        "No duplication of frames.",
+        "Videos with fewer than 32 valid preprocessed frames retain all valid frames.",
+        "Any video with more than 32 PNG frames causes a hard failure.",
+        "Both models will receive the exact same frozen image manifest.",
+    ],
+}
+
+
+LOCK.write_text(
+    json.dumps(
+        lock,
+        indent=2,
+    ),
+    encoding="utf-8",
+)
+
+
+print(
+    json.dumps(
+        lock,
+        indent=2,
+    )
+)
+
+print()
+print("TOTAL USABLE FRAMES =", len(records))
+print("ZERO-FRAME VIDEOS =", len(zero_frame))
+
+PYMAN
+

@@ -1,0 +1,18 @@
+/home/aiotlab/miniconda3/envs/X2DFD/lib/python3.10/site-packages/torch/cuda/__init__.py:51: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+Experts:   0%|                                            | 0/1 [00:00<?, ?it/s]                                                                                Traceback (most recent call last):
+  File "/home/aiotlab/miniconda3/envs/X2DFD/lib/python3.10/runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/home/aiotlab/miniconda3/envs/X2DFD/lib/python3.10/runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "/home/aiotlab/hoangan/projects/X2DFD/eval/infer/runner.py", line 659, in <module>
+    main()
+  File "/home/aiotlab/hoangan/projects/X2DFD/eval/infer/runner.py", line 517, in main
+    items = _build_conversations_multi(payload, experts_cfg=weak_multi)
+  File "/home/aiotlab/hoangan/projects/X2DFD/eval/infer/runner.py", line 249, in _build_conversations_multi
+    score_map = compute_all_scores(experts, abs_paths)
+  File "/home/aiotlab/hoangan/projects/X2DFD/utils/model_scoring.py", line 375, in compute_all_scores
+    prov = get_provider(ex.provider, **(ex.kwargs or {}))
+  File "/home/aiotlab/hoangan/projects/X2DFD/utils/model_scoring.py", line 341, in get_provider
+    raise KeyError(f"Unknown score provider: {name}. Available: {list(_REGISTRY)}")
+KeyError: "Unknown score provider: router_moe_cache. Available: ['blending', 'forensics', 'aligner', 'diffusion', 'diffusion_detector', 'diffdet']"

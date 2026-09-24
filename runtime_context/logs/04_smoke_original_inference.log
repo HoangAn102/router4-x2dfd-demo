@@ -1,0 +1,27 @@
+/home/aiotlab/miniconda3/envs/X2DFD/lib/python3.10/site-packages/torch/cuda/__init__.py:51: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+Experts:   0%|                                            | 0/2 [00:00<?, ?it/s]--- Initializing BlendingDetector: Loading Model from weights/blending_models/best_gf.pth ---
+/home/aiotlab/miniconda3/envs/X2DFD/lib/python3.10/site-packages/torch/functional.py:504: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3526.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+--- BlendingDetector Initialized Successfully ---
+
+Blending Detector Inference (bs=128):   0%|          | 0/1 [00:00<?, ?it/s][A
+Blending Detector Inference (bs=128): 100%|██████████| 1/1 [00:00<00:00,  1.92it/s][ABlending Detector Inference (bs=128): 100%|██████████| 1/1 [00:00<00:00,  1.75it/s]
+Experts:  50%|██████████████████                  | 1/2 [00:04<00:04,  4.44s/it]normalize RESNET
+
+Diffusion[ours-sync] (bs=32):   0%|                       | 0/1 [00:00<?, ?it/s][A
+Diffusion[ours-sync] (bs=32): 100%|███████████████| 1/1 [00:00<00:00,  1.12it/s][A
+                                                                                [AExperts: 100%|████████████████████████████████████| 2/2 [00:06<00:00,  3.07s/it]                                                                                LoRA Inference:   0%|                                     | 0/8 [00:00<?, ?it/s]Loading LLaVA from base model...
+
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s][A
+Loading checkpoint shards:  50%|█████     | 1/2 [00:01<00:01,  1.92s/it][A
+Loading checkpoint shards: 100%|██████████| 2/2 [00:02<00:00,  1.17s/it][ALoading checkpoint shards: 100%|██████████| 2/2 [00:02<00:00,  1.28s/it]
+Loading additional LLaVA weights...
+Loading LoRA weights...
+Merging LoRA weights...
+Model is loaded...
+/home/aiotlab/miniconda3/envs/X2DFD/lib/python3.10/site-packages/transformers/generation/configuration_utils.py:392: UserWarning: `do_sample` is set to `False`. However, `temperature` is set to `0.0` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `temperature`.
+  warnings.warn(
+LoRA Inference:  12%|███▋                         | 1/8 [00:08<00:58,  8.35s/it]LoRA Inference:  25%|███████▎                     | 2/8 [00:08<00:21,  3.64s/it]LoRA Inference:  38%|██████████▉                  | 3/8 [00:09<00:10,  2.13s/it]LoRA Inference:  50%|██████████████▌              | 4/8 [00:09<00:05,  1.42s/it]LoRA Inference:  62%|██████████████████▏          | 5/8 [00:09<00:03,  1.03s/it]LoRA Inference:  75%|█████████████████████▊       | 6/8 [00:10<00:01,  1.26it/s]LoRA Inference:  88%|█████████████████████████▍   | 7/8 [00:10<00:00,  1.56it/s]LoRA Inference: 100%|█████████████████████████████| 8/8 [00:10<00:00,  1.85it/s]LoRA Inference: 100%|█████████████████████████████| 8/8 [00:10<00:00,  1.33s/it]
+Saved conversation-style results: /home/aiotlab/hoangan/projects/X2DFD/eval/outputs/infer/runs/infer_20260922T043633Z/datasets/FULL_2CROSS_INPUT_result.json
+Run info saved to: /home/aiotlab/hoangan/projects/X2DFD/eval/outputs/infer/runs/infer_20260922T043633Z/infer_info.json

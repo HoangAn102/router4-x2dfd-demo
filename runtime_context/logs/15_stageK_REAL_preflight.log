@@ -1,0 +1,11 @@
+ORIGINAL:
+/home/aiotlab/hoangan/projects/X2DFD/eval/configs/infer_full_DFDCP_DFDC_original.yaml
+
+ROUTER-MOE:
+/home/aiotlab/hoangan/projects/X2DFD/eval/configs/infer_full_DFDCP_DFDC_router_moe.yaml
+
+FULL INPUTS:
+  Description
+  images
+
+CONFIGS READY ✅
