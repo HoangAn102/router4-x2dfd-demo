@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+ENVROOT="/home/aiotlab/miniconda3/envs/X2DFD"
+REAL="/home/aiotlab/miniconda3/envs/X2DFD/bin/python"
+
+SITE="$(
+  /usr/bin/env -i \
+    HOME="${HOME:-/home/aiotlab}" \
+    PATH="$ENVROOT/bin:/usr/bin:/bin" \
+    "$REAL" -S -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])'
+)"
+
+TORCHLIB="$SITE/torch/lib"
+
+EXTRA="$(
+  find "$SITE/nvidia" -type d -name lib -print 2>/dev/null \
+  | sort -u \
+  | paste -sd: -
+)"
+
+LD="$TORCHLIB:$ENVROOT/lib"
+
+if [[ -n "$EXTRA" ]]; then
+  LD="$LD:$EXTRA"
+fi
+
+ENVV=(
+  "HOME=${HOME:-/home/aiotlab}"
+  "USER=${USER:-aiotlab}"
+  "LANG=${LANG:-C.UTF-8}"
+  "PATH=$ENVROOT/bin:/usr/bin:/bin"
+  "PYTHONNOUSERSITE=1"
+  "LD_LIBRARY_PATH=$LD"
+)
+
+if [[ -n "${CUDA_VISIBLE_DEVICES+x}" ]]; then
+  ENVV+=("CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES")
+fi
+
+if [[ -n "${PYTHONPATH+x}" ]]; then
+  ENVV+=("PYTHONPATH=$PYTHONPATH")
+fi
+
+if [[ -n "${X2DFD_PEFT_COMPAT_ROOT+x}" ]]; then
+  ENVV+=("X2DFD_PEFT_COMPAT_ROOT=$X2DFD_PEFT_COMPAT_ROOT")
+fi
+
+if [[ -n "${USE_PROGRESS_BAR+x}" ]]; then
+  ENVV+=("USE_PROGRESS_BAR=$USE_PROGRESS_BAR")
+fi
+
+exec /usr/bin/env -i "${ENVV[@]}" "$REAL" "$@"

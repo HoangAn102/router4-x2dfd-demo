@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+ENVROOT="/home/aiotlab/miniconda3/envs/TextureExpert"
+REAL="$ENVROOT/bin/python"
+SITE="$ENVROOT/lib/python3.8/site-packages"
+TORCHLIB="$SITE/torch/lib"
+
+die() {
+    printf '[TEXTURE-RUNTIME-FAIL] %s\n' "$*" >&2
+    exit 90
+}
+
+[[ -x "$REAL" ]] || die "missing python: $REAL"
+[[ -d "$SITE" ]] || die "missing site-packages: $SITE"
+[[ -d "$TORCHLIB" ]] || die "missing torch/lib: $TORCHLIB"
+[[ -f "$TORCHLIB/libtorch_python.so" ]] \
+    || die "missing libtorch_python.so"
+
+# Torch 1.x wheels commonly bundle CUDA/cuDNN/cuBLAS directly
+# in torch/lib. Newer layouts may additionally use site-packages/nvidia.
+#
+# Critically: absence of SITE/nvidia is NORMAL and must NOT terminate
+# the wrapper under set -e/pipefail.
+EXTRA=""
+
+if [[ -d "$SITE/nvidia" ]]; then
+    while IFS= read -r D; do
+        [[ -n "$D" ]] || continue
+
+        if [[ -z "$EXTRA" ]]; then
+            EXTRA="$D"
+        else
+            EXTRA="$EXTRA:$D"
+        fi
+    done < <(
+        find "$SITE/nvidia" \
+            -type d \
+            -name lib \
+            -print 2>/dev/null \
+        | sort -u
+    )
+fi
+
+# TextureExpert torch/lib FIRST.
+# Never append ambient LD_LIBRARY_PATH.
+LD="$TORCHLIB:$ENVROOT/lib"
+
+if [[ -n "$EXTRA" ]]; then
+    LD="$LD:$EXTRA"
+fi
+
+ENVV=(
+    "HOME=${HOME:-/home/aiotlab}"
+    "USER=${USER:-aiotlab}"
+    "LANG=${LANG:-C.UTF-8}"
+    "PATH=$ENVROOT/bin:/usr/bin:/bin"
+    "PYTHONNOUSERSITE=1"
+    "PYTHONPATH=$SITE"
+    "LD_LIBRARY_PATH=$LD"
+)
+
+# Preserve GPU selection if driver/user intentionally supplied it.
+if [[ -n "${CUDA_VISIBLE_DEVICES+x}" ]]; then
+    ENVV+=(
+        "CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
+    )
+fi
+
+exec /usr/bin/env -i \
+    "${ENVV[@]}" \
+    "$REAL" \
+    -S \
+    "$@"
