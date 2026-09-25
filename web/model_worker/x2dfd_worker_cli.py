@@ -39,6 +39,21 @@ def main():
 
     args = parser.parse_args()
 
+    # --------------------------------------------------------
+    # SAFEVISION_WORKER_ABSOLUTE_MEDIA_PATH_V1
+    # Never depend on subprocess cwd for uploaded media.
+    # --------------------------------------------------------
+    image_path = (
+        Path(args.image)
+        .expanduser()
+        .resolve(strict=True)
+    )
+
+    if not image_path.is_file():
+        raise FileNotFoundError(
+            f"Input image missing: {image_path}"
+        )
+
     x2root = Path(
         os.environ.get(
             "X2DFD_PROJECT_ROOT",
@@ -63,7 +78,7 @@ def main():
 
         result = (
             single_image_infer_with_scores(
-                image_path=args.image,
+                image_path=str(image_path),
                 question=args.prompt,
                 model_path=args.lora_dir,
                 model_base=args.base_model,

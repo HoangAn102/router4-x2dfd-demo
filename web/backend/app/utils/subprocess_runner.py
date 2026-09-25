@@ -14,9 +14,20 @@ class SubprocessExecutionError(Exception):
         returncode: int,
         stderr: str,
     ):
-        super().__init__(message)
         self.returncode = returncode
         self.stderr = stderr
+
+        detail = (stderr or "").strip()
+
+        if len(detail) > 5000:
+            detail = detail[-5000:]
+
+        full_message = (
+            f"{message} (returncode={returncode})"
+            + (f"\n--- subprocess stderr ---\n{detail}" if detail else "")
+        )
+
+        super().__init__(full_message)
 
 
 class SubprocessTimeoutError(Exception):

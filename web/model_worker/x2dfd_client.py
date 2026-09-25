@@ -119,6 +119,28 @@ class X2DFDClient:
         calibrated_score: float,
     ) -> FinalResult:
 
+        # ----------------------------------------------------
+        # SAFEVISION_ABSOLUTE_MEDIA_PATH_V1
+        #
+        # Uploaded files live relative to the web repository,
+        # while the X²-DFD subprocess runs with cwd set to the
+        # X2DFD research project. A relative "uploads/..." path
+        # would therefore resolve against the WRONG directory.
+        #
+        # Resolve while we are still in the web process and
+        # fail immediately if the request file disappeared.
+        # ----------------------------------------------------
+        image_path = (
+            Path(image_path)
+            .expanduser()
+            .resolve(strict=True)
+        )
+
+        if not image_path.is_file():
+            raise FinalScoreUnavailableError(
+                f"Input image is not a regular file: {image_path}"
+            )
+
         if not Path(
             settings.X2PYTHON_BIN
         ).exists():
@@ -147,7 +169,9 @@ class X2DFDClient:
         )
 
         worker_script = (
-            Path(__file__).parent
+            Path(__file__)
+            .resolve()
+            .parent
             / "x2dfd_worker_cli.py"
         )
 
