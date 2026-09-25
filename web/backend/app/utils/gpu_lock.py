@@ -1,45 +1,66 @@
 import asyncio
-from pathlib import Path
 from typing import Optional
 
-try:
-    from filelock import FileLock
-except ImportError:
-    FileLock = None
-
-from ..config import settings
 from .logger import logger
 
 
 class GpuLock:
-    """Inter-process and inter-coroutine lock for GPU inference safety."""
+    """
+    Process-local asynchronous GPU serialization lock.
+
+    SafeVision production invariant:
+      - Uvicorn runs exactly ONE worker.
+      - Only one inference pipeline may use the GPU at a time.
+      - Concurrent requests wait in-process instead of failing because
+        of an external filesystem lock.
+
+    Heavy expert / X2DFD subprocesses are already guarded by their own
+    execution timeouts, so a waiting request is released when the
+    active inference completes or fails.
+    """
+
     _async_lock: Optional[asyncio.Lock] = None
 
-    def __init__(self, lock_path: Optional[Path] = None, timeout: float = 120.0):
-        self.lock_path = lock_path or settings.GPU_LOCK_FILE
-        self.timeout = timeout
-        self.file_lock = FileLock(str(self.lock_path), timeout=self.timeout) if FileLock else None
+    def __init__(self, *args, **kwargs):
+        # Keep a permissive signature for compatibility with older calls.
+        pass
 
     @classmethod
     def _get_async_lock(cls) -> asyncio.Lock:
         if cls._async_lock is None:
             cls._async_lock = asyncio.Lock()
+
         return cls._async_lock
 
     async def __aenter__(self):
-        async_lock = self._get_async_lock()
-        await async_lock.acquire()
-        if self.file_lock:
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(None, self.file_lock.acquire)
+        lock = self._get_async_lock()
+
+        if lock.locked():
+            logger.info(
+                "GPU busy: request queued until current inference finishes."
+            )
+
+        await lock.acquire()
+
+        logger.info(
+            "GPU inference lock acquired."
+        )
+
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        try:
-            if self.file_lock and self.file_lock.is_locked:
-                loop = asyncio.get_running_loop()
-                await loop.run_in_executor(None, self.file_lock.release)
-        finally:
-            async_lock = self._get_async_lock()
-            if async_lock.locked():
-                async_lock.release()
+    async def __aexit__(
+        self,
+        exc_type,
+        exc_val,
+        exc_tb,
+    ):
+        lock = self._get_async_lock()
+
+        if lock.locked():
+            lock.release()
+
+        logger.info(
+            "GPU inference lock released."
+        )
+
+        return False
