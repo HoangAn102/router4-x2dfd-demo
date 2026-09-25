@@ -30,7 +30,7 @@ def main():
         sys.path.insert(0, str(x2dfd_dir))
 
     try:
-        from utils.lora_inference import single_image_infer_with_scores
+        from utils.lora_inference import single_image_infer_with_scores  # type: ignore
 
         result = single_image_infer_with_scores(
             image_path=args.image,

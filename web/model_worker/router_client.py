@@ -24,7 +24,7 @@ class RouterClient:
         self._transform = None
 
     def _init_transform(self):
-        from torchvision import transforms
+        from torchvision import transforms  # type: ignore
         return transforms.Compose([
             transforms.Resize(256),
             transforms.CenterCrop(224),
@@ -42,7 +42,7 @@ class RouterClient:
 
         import torch
         import torch.nn as nn
-        from torchvision.models import efficientnet_b0
+        from torchvision.models import efficientnet_b0  # type: ignore
 
         ckpt_path = Path(self.checkpoint_path)
         if not ckpt_path.exists():

@@ -19,7 +19,7 @@ class ExpertClient:
         if self.calibrators is not None:
             return
 
-        import joblib
+        import joblib  # type: ignore
         cal_path = Path(self.calibrators_path)
         if not cal_path.exists():
             raise FileNotFoundError(f"Calibrators bundle does not exist at '{self.calibrators_path}'")

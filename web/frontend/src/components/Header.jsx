@@ -30,14 +30,6 @@ export default function Header({ runMode, isReady }) {
         </div>
       </div>
 
-      {isMock && (
-        <div className="mock-alert-banner">
-          <AlertTriangle size={20} style={{ flexShrink: 0 }} />
-          <div>
-            <strong>CẢNH BÁO MOCK DEVELOPMENT MODE:</strong> Website đang chạy với dữ liệu mô phỏng giả lập để kiểm thử giao diện. Để chạy AI thực tế, cần cấu hình <code>RUN_MODE=live</code> trên server GPU.
-          </div>
-        </div>
-      )}
     </header>
   );
 }

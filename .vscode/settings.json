@@ -1,0 +1,18 @@
+{
+  "python.analysis.extraPaths": [
+    "./",
+    "./web",
+    "./source_snapshot/projects/X2DFD",
+    "./source_snapshot/projects/DFFreq-main",
+    "./source_snapshot/projects/Global_Texture_Enhancement_for_Fake_Face_Detection_in_the-Wild",
+    "./source_snapshot/projects/x2dfd_router_integration"
+  ],
+  "python.autoComplete.extraPaths": [
+    "./",
+    "./web",
+    "./source_snapshot/projects/X2DFD",
+    "./source_snapshot/projects/DFFreq-main",
+    "./source_snapshot/projects/Global_Texture_Enhancement_for_Fake_Face_Detection_in_the-Wild",
+    "./source_snapshot/projects/x2dfd_router_integration"
+  ]
+}
