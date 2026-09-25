@@ -445,9 +445,22 @@ def _x2_load_pretrained_model_compat(
         )
 
 
-    # LLaVA's loader selects the LoRA loading branch from model_name.
-    # Router4's adapter directory name is not guaranteed to include
-    # the literal word "lora".
+    # ============================================================
+    # X2DFD_LLAVA_LORA_BRANCH_FIX_V1
+    #
+    # Official LLaVA builder dispatches by model_name:
+    #   - "llava" is required to enter the multimodal LLaVA branch
+    #   - "lora" is required to enter the LLaVA + LoRA branch
+    #
+    # Router4 adapter directory:
+    #   router4_x2dfd_FINAL_CLEAN
+    #
+    # does not naturally contain either token.
+    #
+    # Without "llava", the loader falls into generic
+    # AutoModelForCausalLM and crashes on LlavaConfig.
+    # ============================================================
+
     if is_adapter:
 
         if len(args) >= 3:
@@ -456,11 +469,19 @@ def _x2_load_pretrained_model_compat(
                 args[2]
             )
 
+            if "llava" not in model_name.lower():
+                model_name = (
+                    "llava-"
+                    + model_name
+                )
+
             if "lora" not in model_name.lower():
-                args[2] = (
+                model_name = (
                     model_name
                     + "-lora"
                 )
+
+            args[2] = model_name
 
         elif "model_name" in kwargs:
 
@@ -468,11 +489,19 @@ def _x2_load_pretrained_model_compat(
                 kwargs["model_name"]
             )
 
+            if "llava" not in model_name.lower():
+                model_name = (
+                    "llava-"
+                    + model_name
+                )
+
             if "lora" not in model_name.lower():
-                kwargs["model_name"] = (
+                model_name = (
                     model_name
                     + "-lora"
                 )
+
+            kwargs["model_name"] = model_name
 
 
     return (
