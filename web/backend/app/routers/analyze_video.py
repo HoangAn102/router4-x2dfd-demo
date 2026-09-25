@@ -71,7 +71,7 @@ async def _run_video_background_task(job_id: str, video_path: Path):
             fps=round(fps, 1),
             total_frames_extracted=total_frames,
             frames_analyzed=total_frames,
-            sampling_protocol="DeepfakeBench_uniform",
+            sampling_protocol="uniform_raw_frames_UNVERIFIED",
         )
 
         if final_result is not None:

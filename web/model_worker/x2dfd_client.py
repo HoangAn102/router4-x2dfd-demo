@@ -1,7 +1,8 @@
 import json
 import math
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Optional, Tuple
+
 from web.backend.app.config import settings
 from web.backend.app.schemas.image import FinalResult
 from web.backend.app.utils.logger import logger
@@ -13,72 +14,102 @@ class FinalScoreUnavailableError(Exception):
 
 
 class X2DFDClient:
-    """Invokes X²-DFD LLaVA + LoRA adapter with Weighted Forensic Scoring (WFS) prompt."""
+    """LIVE X²-DFD + Router-aware LoRA client."""
 
-    def __init__(self, lora_dir: str = "", base_model: str = ""):
-        self.lora_dir = lora_dir or settings.ROUTER4_LORA_DIR
-        self.base_model = base_model or settings.BASE_LLAVA_DIR
+    def __init__(
+        self,
+        lora_dir: str = "",
+        base_model: str = "",
+    ):
+        self.lora_dir = (
+            lora_dir
+            or settings.ROUTER4_LORA_DIR
+        )
 
-    @staticmethod
-    def build_wfs_prompt(selected_alias: str, calibrated_score: float) -> str:
-        """
-        Build the canonical WFS prompt verified from training source:
-        '<image>\\nIs this image real or fake? And the {alias} score is {score:.3f}.'
-        """
-        return f"<image>\nIs this image real or fake? And the {selected_alias} score is {calibrated_score:.3f}."
-
-    def validate_scores(self, real_score: Any, fake_score: Any) -> Tuple[float, float]:
-        """Strict fail-closed score validation adhering to all security and statistical rules."""
-        # 1. Reject boolean values explicitly (Python bool is an int subclass)
-        if isinstance(real_score, bool) or isinstance(fake_score, bool):
-            raise FinalScoreUnavailableError("Score must not be a boolean value.")
-
-        # 2. Type validation
-        if not isinstance(real_score, (float, int)) or not isinstance(fake_score, (float, int)):
-            raise FinalScoreUnavailableError(
-                f"Score must be numeric. Got real={type(real_score).__name__}, fake={type(fake_score).__name__}"
-            )
-
-        real_f = float(real_score)
-        fake_f = float(fake_score)
-
-        # 3. Finite validation (reject NaN, Inf, -Inf)
-        if not (math.isfinite(real_f) and math.isfinite(fake_f)):
-            raise FinalScoreUnavailableError(
-                f"Encountered non-finite score from detector: real={real_f}, fake={fake_f}"
-            )
-
-        # 4. Domain bound validation [0.0, 1.0]
-        if not (0.0 <= real_f <= 1.0 and 0.0 <= fake_f <= 1.0):
-            raise FinalScoreUnavailableError(
-                f"Score out of valid bounds [0, 1]: real={real_f}, fake={fake_f}"
-            )
-
-        # 5. Normalization sum validation
-        if abs((real_f + fake_f) - 1.0) > 1e-4:
-            raise FinalScoreUnavailableError(
-                f"Pairwise token probabilities do not sum to 1.0: sum={real_f + fake_f}"
-            )
-
-        return real_f, fake_f
+        self.base_model = (
+            base_model
+            or settings.BASE_LLAVA_DIR
+        )
 
     @staticmethod
-    def extract_explanation(answer_text: Optional[str]) -> Optional[str]:
-        """
-        Extract AI explanation text strictly if the model generated natural language beyond the label.
-        If the model only generated 'Real' or 'Fake', return None.
-        """
+    def build_wfs_prompt(
+        selected_alias: str,
+        calibrated_score: float,
+    ) -> str:
+
+        return (
+            "<image>\n"
+            "Is this image real or fake? "
+            f"And the {selected_alias} score is "
+            f"{calibrated_score:.3f}."
+        )
+
+    @staticmethod
+    def validate_scores(
+        real_score: Any,
+        fake_score: Any,
+    ) -> Tuple[float, float]:
+
+        if (
+            isinstance(real_score, bool)
+            or isinstance(fake_score, bool)
+        ):
+            raise FinalScoreUnavailableError(
+                "REAL/FAKE score cannot be bool"
+            )
+
+        if not isinstance(
+            real_score,
+            (float, int),
+        ) or not isinstance(
+            fake_score,
+            (float, int),
+        ):
+            raise FinalScoreUnavailableError(
+                "REAL/FAKE score is missing/non-numeric"
+            )
+
+        real = float(real_score)
+        fake = float(fake_score)
+
+        if not (
+            math.isfinite(real)
+            and math.isfinite(fake)
+        ):
+            raise FinalScoreUnavailableError(
+                "Non-finite final score"
+            )
+
+        if not (
+            0.0 <= real <= 1.0
+            and 0.0 <= fake <= 1.0
+        ):
+            raise FinalScoreUnavailableError(
+                "Final score outside [0,1]"
+            )
+
+        if abs(
+            (real + fake) - 1.0
+        ) > 1e-4:
+            raise FinalScoreUnavailableError(
+                "REAL/FAKE pair not normalized"
+            )
+
+        return real, fake
+
+    @staticmethod
+    def extract_explanation(
+        answer_text: Optional[str],
+    ) -> Optional[str]:
+
         if not answer_text:
             return None
 
         cleaned = answer_text.strip()
-        tokens = cleaned.split()
 
-        # If answer is just "Real" or "Fake" or "real." -> no explanation generated
-        if len(tokens) <= 2:
+        if len(cleaned.split()) <= 2:
             return None
 
-        # Return full natural language reasoning
         return cleaned
 
     async def infer(
@@ -87,44 +118,127 @@ class X2DFDClient:
         selected_alias: str,
         calibrated_score: float,
     ) -> FinalResult:
-        """Run LLaVA LoRA inference and return validated FinalResult."""
-        prompt = self.build_wfs_prompt(selected_alias, calibrated_score)
-        logger.info(f"Running X²-DFD with prompt: {prompt}")
 
-        # When running live on research server with x2python wrapper:
-        if Path(settings.X2PYTHON_BIN).exists():
-            worker_script = Path(__file__).parent / "x2dfd_worker_cli.py"
-            cmd = [
-                settings.X2PYTHON_BIN,
-                str(worker_script),
-                "--image", str(image_path),
-                "--prompt", prompt,
-                "--lora-dir", self.lora_dir,
-                "--base-model", self.base_model,
-            ]
-            stdout, _ = await SubprocessRunner.run(
-                cmd,
-                timeout=settings.IMAGE_INFERENCE_TIMEOUT_SEC,
+        if not Path(
+            settings.X2PYTHON_BIN
+        ).exists():
+            raise FinalScoreUnavailableError(
+                "X²-DFD runtime missing. "
+                "Refusing expert-score substitution."
             )
-            payload = json.loads(stdout.strip())
-            raw_real = payload.get("real_score")
-            raw_fake = payload.get("fake_score")
-            answer = payload.get("answer", "")
-        else:
-            # Server preflight / placeholder when running outside GPU node
-            raw_fake = calibrated_score
-            raw_real = round(1.0 - raw_fake, 6)
-            answer = f"The image exhibits forensic manipulation consistent with {selected_alias} artifacts."
 
-        real_prob, fake_prob = self.validate_scores(raw_real, raw_fake)
-        verdict = "FAKE" if fake_prob >= 0.5 else "REAL"
-        explanation = self.extract_explanation(answer)
+        if not Path(
+            self.lora_dir
+        ).exists():
+            raise FinalScoreUnavailableError(
+                "Router-aware LoRA missing"
+            )
+
+        if not Path(
+            self.base_model
+        ).exists():
+            raise FinalScoreUnavailableError(
+                "Base LLaVA missing"
+            )
+
+        prompt = self.build_wfs_prompt(
+            selected_alias,
+            calibrated_score,
+        )
+
+        worker_script = (
+            Path(__file__).parent
+            / "x2dfd_worker_cli.py"
+        )
+
+        stdout, _ = (
+            await SubprocessRunner.run(
+                [
+                    settings.X2PYTHON_BIN,
+                    str(worker_script),
+                    "--image",
+                    str(image_path),
+                    "--prompt",
+                    prompt,
+                    "--lora-dir",
+                    self.lora_dir,
+                    "--base-model",
+                    self.base_model,
+                    "--max-new-tokens",
+                    "32",
+                ],
+                timeout=settings.IMAGE_INFERENCE_TIMEOUT_SEC,
+                cwd=settings.X2DFD_PROJECT_ROOT,
+                custom_env={
+                    "PYTHONPATH":
+                        settings.X2DFD_PROJECT_ROOT,
+
+                    "X2DFD_PROJECT_ROOT":
+                        settings.X2DFD_PROJECT_ROOT,
+                },
+            )
+        )
+
+        payload = None
+
+        # Model libraries may log before JSON.
+        # Find the LAST valid score payload.
+        for line in reversed(
+            stdout.splitlines()
+        ):
+            line = line.strip()
+
+            if not line:
+                continue
+
+            try:
+                obj = json.loads(line)
+            except Exception:
+                continue
+
+            if (
+                isinstance(obj, dict)
+                and "real_score" in obj
+                and "fake_score" in obj
+            ):
+                payload = obj
+                break
+
+        if payload is None:
+            raise FinalScoreUnavailableError(
+                "No valid final-score JSON "
+                "returned by X²-DFD"
+            )
+
+        real, fake = self.validate_scores(
+            payload.get("real_score"),
+            payload.get("fake_score"),
+        )
+
+        verdict = (
+            "FAKE"
+            if fake >= 0.5
+            else "REAL"
+        )
+
+        explanation = (
+            self.extract_explanation(
+                payload.get("answer", "")
+            )
+        )
+
+        logger.info(
+            "FINAL X2DFD: real=%.8f fake=%.8f verdict=%s",
+            real,
+            fake,
+            verdict,
+        )
 
         return FinalResult(
             verdict=verdict,
-            fake_probability=fake_prob,
-            real_probability=real_prob,
-            continuous_score=fake_prob,
+            fake_probability=fake,
+            real_probability=real,
+            continuous_score=fake,
             decision_threshold=0.5,
             explanation=explanation,
         )

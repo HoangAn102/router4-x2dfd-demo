@@ -7,6 +7,10 @@ export default function ImageResultCard({ result }) {
   const isFake = result.final.verdict === 'FAKE';
   const fakeProb = (result.final.fake_probability * 100).toFixed(1);
   const realProb = (result.final.real_probability * 100).toFixed(1);
+  const displayProb = isFake ? fakeProb : realProb;
+  const displayProbLabel = isFake
+    ? 'Xác suất Giả mạo (P_fake)'
+    : 'Xác suất Ảnh thật (P_real)';
   const routerConf = ((result.router?.router_confidence || 0) * 100).toFixed(1);
   const margin = ((result.router?.margin || 0) * 100).toFixed(1);
   const rawExpert = ((result.expert?.raw_score || 0) * 100).toFixed(1);
@@ -32,9 +36,9 @@ export default function ImageResultCard({ result }) {
 
         <div className="score-metric-box">
           <div className="score-metric-val" style={{ color: isFake ? '#fb7185' : '#34d399' }}>
-            {fakeProb}%
+            {displayProb}%
           </div>
-          <div className="score-metric-desc">Xác suất Giả mạo (P_fake)</div>
+          <div className="score-metric-desc">{displayProbLabel}</div>
         </div>
       </div>
 

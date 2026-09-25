@@ -35,7 +35,7 @@ export default function App() {
 
         const readiness = await checkReadiness();
         if (mounted) {
-          setIsReady(Boolean(readiness?.ready));
+          setIsReady(Boolean(readiness?.all_ready));
         }
       } catch (e) {
         console.warn('System status fetch failed:', e);

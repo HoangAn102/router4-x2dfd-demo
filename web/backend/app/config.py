@@ -45,6 +45,15 @@ class Settings(BaseSettings):
     FREQPYTHON_BIN: str = "/home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/runtime_clean_v2/freqpython"
     TEXPYTHON_BIN: str = "/home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/runtime_clean_v2/texpython"
 
+    # LIVE research source roots
+    X2DFD_PROJECT_ROOT: str = "/home/aiotlab/hoangan/projects/X2DFD"
+    DFFREQ_PROJECT_ROOT: str = "/home/aiotlab/hoangan/projects/DFFreq-main"
+    TEXTURE_PROJECT_ROOT: str = "/home/aiotlab/hoangan/projects/Global_Texture_Enhancement_for_Fake_Face_Detection_in_the-Wild/stylegan-ffhq"
+    ROUTER8_WRAPPER_ROOT: str = "/home/aiotlab/hoangan/router8_x2crop"
+
+    # First load of large expert/MLLM checkpoints can be slow.
+    EXPERT_INFERENCE_TIMEOUT_SEC: int = 600
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

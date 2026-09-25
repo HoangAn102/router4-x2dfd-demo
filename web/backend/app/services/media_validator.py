@@ -114,7 +114,12 @@ class MediaValidator:
             if not ret or frame_count <= 0:
                 raise MediaValidationError("CORRUPTED_VIDEO", "Failed to decode any valid frames from video.")
         except ImportError:
-            # Fallback if cv2 is not yet installed in dev environment
+            if settings.RUN_MODE == "live":
+                raise MediaValidationError(
+                    "VIDEO_RUNTIME_UNAVAILABLE",
+                    "OpenCV is unavailable in LIVE mode; refusing simulated video metadata."
+                )
+
             duration = 10.0
             frame_count = 250
             fps = 25.0
