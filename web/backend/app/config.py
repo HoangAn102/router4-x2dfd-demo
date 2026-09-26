@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     TEXTURE_PROJECT_ROOT: str = "/home/aiotlab/hoangan/projects/Global_Texture_Enhancement_for_Fake_Face_Detection_in_the-Wild/stylegan-ffhq"
     ROUTER8_WRAPPER_ROOT: str = "/home/aiotlab/hoangan/router8_x2crop"
 
+    # Public GPU endpoint used ONLY by the Render same-origin proxy.
+    GPU_API_ORIGIN: str = 'https://gains-how-cheque-enquiry.trycloudflare.com'
+
     # First load of large expert/MLLM checkpoints can be slow.
     EXPERT_INFERENCE_TIMEOUT_SEC: int = 600
 

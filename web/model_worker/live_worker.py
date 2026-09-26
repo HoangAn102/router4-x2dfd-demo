@@ -1,6 +1,6 @@
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 from web.backend.app.config import settings
 from web.backend.app.schemas.common import ReadinessComponent
 from web.backend.app.schemas.image import (
@@ -27,6 +27,41 @@ class LiveModelWorker(BaseModelWorker):
         self.expert_client = ExpertClient()
         self.x2dfd_client = X2DFDClient()
         self.aggregator = VideoAggregator()
+
+    def _should_release_x2dfd_for_experts(self) -> bool:
+        """
+        Keep X2DFD resident on large-memory GPUs.
+
+        A40 48GB has enough headroom for the persistent LLaVA/LoRA
+        plus the project's selected forensic experts in the current
+        single-request design.
+
+        Smaller GPUs retain the conservative release behavior.
+        """
+        try:
+            import torch
+
+            if not torch.cuda.is_available():
+                return True
+
+            total_gb = (
+                torch.cuda.get_device_properties(0).total_memory
+                / (1024 ** 3)
+            )
+
+            release = total_gb < 40.0
+
+            logger.info(
+                "GPU memory %.1f GB -> X2DFD %s before expert stage",
+                total_gb,
+                "RELEASE" if release else "KEEP-WARM",
+            )
+
+            return release
+
+        except Exception:
+            return True
+
 
     def check_readiness(self) -> Dict[str, ReadinessComponent]:
         """Check presence and readiness of physical artifacts on research server."""
@@ -70,7 +105,12 @@ class LiveModelWorker(BaseModelWorker):
             selected_expert, selected_alias, router_conf, margin = self.router_client.route_image(image_path)
             t_route = (time.time() - t_route_0) * 1000
 
-            # Step 2: Selected Expert runs and Calibrator scales raw score
+            # Step 2: selected expert.
+            #
+            # Release persistent X2DFD before loading a forensic expert
+            # to avoid unnecessary simultaneous VRAM residency.
+            if self._should_release_x2dfd_for_experts():
+                await self.x2dfd_client.stop_worker()
             t_exp_0 = time.time()
             raw_score, calibrated_score = await self.expert_client.compute_expert_score(selected_expert, image_path)
             t_exp = (time.time() - t_exp_0) * 1000
@@ -111,6 +151,211 @@ class LiveModelWorker(BaseModelWorker):
                 "lora_adapter": Path(settings.ROUTER4_LORA_DIR).name,
             }
         )
+
+
+    async def analyze_video_batch(
+        self,
+        extracted_data: List[dict],
+        progress_callback: Optional[
+            Callable[[int, int, str], None]
+        ] = None,
+    ) -> List[FrameResult]:
+
+        """
+        Optimized but scientifically equivalent per-frame video path.
+
+        Every frame still performs:
+          Router4 -> selected expert -> calibration -> X2DFD.
+
+        Optimization only:
+          - Router4 stays loaded.
+          - Frames selecting the same expert are batched.
+          - X2DFD/LLaVA loads once for the X2DFD frame stage.
+        """
+
+        if not extracted_data:
+            return []
+
+        async with GpuLock():
+
+            total = len(extracted_data)
+
+            routed = []
+
+            groups = {
+                "blending": [],
+                "diffusion": [],
+                "frequency": [],
+                "texture": [],
+            }
+
+
+            # ----------------------------------------------
+            # A. Independent Router4 decision per frame.
+            # ----------------------------------------------
+
+            for pos, item in enumerate(
+                extracted_data
+            ):
+
+                path = (
+                    Path(item["frame_path"])
+                    .expanduser()
+                    .resolve(strict=True)
+                )
+
+                (
+                    expert,
+                    alias,
+                    router_conf,
+                    router_margin,
+                ) = self.router_client.route_image(
+                    path
+                )
+
+                routed.append(
+                    {
+                        "item": item,
+                        "path": path,
+                        "expert": expert,
+                        "alias": alias,
+                        "router_confidence":
+                            router_conf,
+                        "router_margin":
+                            router_margin,
+                    }
+                )
+
+                groups[expert].append(
+                    path
+                )
+
+                if progress_callback:
+                    progress_callback(
+                        pos + 1,
+                        total,
+                        "routing_frames",
+                    )
+
+
+            # Ensure forensic expert batches get maximum free VRAM.
+            if self._should_release_x2dfd_for_experts():
+                await self.x2dfd_client.stop_worker()
+            # ----------------------------------------------
+            # B. Batch only computationally.
+            #    Scores remain one-per-frame.
+            # ----------------------------------------------
+
+            scores = {}
+
+            active_groups = [
+                (expert, groups[expert])
+                for expert in (
+                    "blending",
+                    "diffusion",
+                    "frequency",
+                    "texture",
+                )
+                if groups[expert]
+            ]
+
+            for expert_pos, (expert, paths) in enumerate(
+                active_groups,
+                start=1,
+            ):
+
+                if progress_callback:
+                    progress_callback(
+                        expert_pos,
+                        len(active_groups),
+                        "scoring_experts",
+                    )
+
+                batch = (
+                    await self.expert_client
+                    .compute_expert_scores_batch(
+                        expert,
+                        paths,
+                    )
+                )
+
+                scores.update(batch)
+
+
+            # ----------------------------------------------
+            # C. Independent X2DFD decision per frame.
+            #    First frame loads LLaVA+LoRA.
+            #    Remaining frames reuse cached model.
+            # ----------------------------------------------
+
+            frames = []
+
+            if progress_callback:
+                progress_callback(
+                    0,
+                    total,
+                    "loading_x2dfd",
+                )
+
+            for pos, row in enumerate(
+                routed
+            ):
+
+                key = str(
+                    row["path"]
+                )
+
+                if key not in scores:
+                    raise RuntimeError(
+                        f"Missing expert score: {key}"
+                    )
+
+                _, calibrated = scores[key]
+
+                final_result = (
+                    await self.x2dfd_client.infer(
+                        row["path"],
+                        row["alias"],
+                        calibrated,
+                    )
+                )
+
+                item = row["item"]
+
+                frames.append(
+                    FrameResult(
+                        frame_index=
+                            item["frame_index"],
+
+                        timestamp_seconds=
+                            item["timestamp_seconds"],
+
+                        selected_expert=
+                            row["expert"],
+
+                        expert_score=
+                            calibrated,
+
+                        final_frame_score=
+                            final_result.continuous_score,
+
+                        verdict=
+                            final_result.verdict,
+
+                        thumbnail_b64=
+                            item.get("thumbnail_b64"),
+                    )
+                )
+
+                if progress_callback:
+                    progress_callback(
+                        pos + 1,
+                        total,
+                        "analyzing_frames",
+                    )
+
+            return frames
+
 
     async def analyze_video_frame(
         self, frame_path: Path, frame_idx: int, timestamp: float

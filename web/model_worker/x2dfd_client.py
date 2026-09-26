@@ -1,12 +1,14 @@
+import asyncio
 import json
 import math
+import os
+
 from pathlib import Path
 from typing import Any, Optional, Tuple
 
 from web.backend.app.config import settings
 from web.backend.app.schemas.image import FinalResult
 from web.backend.app.utils.logger import logger
-from web.backend.app.utils.subprocess_runner import SubprocessRunner
 
 
 class FinalScoreUnavailableError(Exception):
@@ -14,13 +16,13 @@ class FinalScoreUnavailableError(Exception):
 
 
 class X2DFDClient:
-    """LIVE X²-DFD + Router-aware LoRA client."""
 
     def __init__(
         self,
         lora_dir: str = "",
         base_model: str = "",
     ):
+
         self.lora_dir = (
             lora_dir
             or settings.ROUTER4_LORA_DIR
@@ -30,6 +32,10 @@ class X2DFDClient:
             base_model
             or settings.BASE_LLAVA_DIR
         )
+
+        self._proc = None
+        self._request_lock = asyncio.Lock()
+
 
     @staticmethod
     def build_wfs_prompt(
@@ -43,6 +49,7 @@ class X2DFDClient:
             f"And the {selected_alias} score is "
             f"{calibrated_score:.3f}."
         )
+
 
     @staticmethod
     def validate_scores(
@@ -60,13 +67,13 @@ class X2DFDClient:
 
         if not isinstance(
             real_score,
-            (float, int),
+            (int, float),
         ) or not isinstance(
             fake_score,
-            (float, int),
+            (int, float),
         ):
             raise FinalScoreUnavailableError(
-                "REAL/FAKE score is missing/non-numeric"
+                "REAL/FAKE score missing/non-numeric"
             )
 
         real = float(real_score)
@@ -81,21 +88,20 @@ class X2DFDClient:
             )
 
         if not (
-            0.0 <= real <= 1.0
-            and 0.0 <= fake <= 1.0
+            0 <= real <= 1
+            and 0 <= fake <= 1
         ):
             raise FinalScoreUnavailableError(
                 "Final score outside [0,1]"
             )
 
-        if abs(
-            (real + fake) - 1.0
-        ) > 1e-4:
+        if abs(real + fake - 1.0) > 1e-4:
             raise FinalScoreUnavailableError(
                 "REAL/FAKE pair not normalized"
             )
 
         return real, fake
+
 
     @staticmethod
     def extract_explanation(
@@ -105,48 +111,56 @@ class X2DFDClient:
         if not answer_text:
             return None
 
-        cleaned = answer_text.strip()
+        text = answer_text.strip()
 
-        if len(cleaned.split()) <= 2:
+        if len(text.split()) <= 2:
             return None
 
-        return cleaned
+        return text
 
-    async def infer(
-        self,
-        image_path: Path,
-        selected_alias: str,
-        calibrated_score: float,
-    ) -> FinalResult:
 
-        # ----------------------------------------------------
-        # SAFEVISION_ABSOLUTE_MEDIA_PATH_V1
-        #
-        # Uploaded files live relative to the web repository,
-        # while the X²-DFD subprocess runs with cwd set to the
-        # X2DFD research project. A relative "uploads/..." path
-        # would therefore resolve against the WRONG directory.
-        #
-        # Resolve while we are still in the web process and
-        # fail immediately if the request file disappeared.
-        # ----------------------------------------------------
-        image_path = (
-            Path(image_path)
-            .expanduser()
-            .resolve(strict=True)
+    async def stop_worker(self):
+
+        proc = self._proc
+        self._proc = None
+
+        if proc is None:
+            return
+
+        if proc.returncode is None:
+
+            try:
+                proc.terminate()
+
+                await asyncio.wait_for(
+                    proc.wait(),
+                    timeout=5,
+                )
+
+            except Exception:
+
+                try:
+                    proc.kill()
+                    await proc.wait()
+                except Exception:
+                    pass
+
+
+    async def _ensure_worker(self):
+
+        if (
+            self._proc is not None
+            and self._proc.returncode is None
+        ):
+            return
+
+        runtime = Path(
+            settings.X2PYTHON_BIN
         )
 
-        if not image_path.is_file():
+        if not runtime.exists():
             raise FinalScoreUnavailableError(
-                f"Input image is not a regular file: {image_path}"
-            )
-
-        if not Path(
-            settings.X2PYTHON_BIN
-        ).exists():
-            raise FinalScoreUnavailableError(
-                "X²-DFD runtime missing. "
-                "Refusing expert-score substitution."
+                "X2DFD runtime missing"
             )
 
         if not Path(
@@ -163,11 +177,6 @@ class X2DFDClient:
                 "Base LLaVA missing"
             )
 
-        prompt = self.build_wfs_prompt(
-            selected_alias,
-            calibrated_score,
-        )
-
         worker_script = (
             Path(__file__)
             .resolve()
@@ -175,68 +184,163 @@ class X2DFDClient:
             / "x2dfd_worker_cli.py"
         )
 
-        stdout, _ = (
-            await SubprocessRunner.run(
-                [
-                    settings.X2PYTHON_BIN,
-                    str(worker_script),
-                    "--image",
-                    str(image_path),
-                    "--prompt",
-                    prompt,
-                    "--lora-dir",
-                    self.lora_dir,
-                    "--base-model",
-                    self.base_model,
-                    "--max-new-tokens",
-                    "32",
-                ],
-                timeout=settings.IMAGE_INFERENCE_TIMEOUT_SEC,
-                cwd=settings.X2DFD_PROJECT_ROOT,
-                custom_env={
-                    "PYTHONPATH":
-                        settings.X2DFD_PROJECT_ROOT,
+        env = dict(os.environ)
 
-                    "X2DFD_PROJECT_ROOT":
-                        settings.X2DFD_PROJECT_ROOT,
-                },
+        env["PYTHONPATH"] = (
+            settings.X2DFD_PROJECT_ROOT
+        )
+
+        env["X2DFD_PROJECT_ROOT"] = (
+            settings.X2DFD_PROJECT_ROOT
+        )
+
+        logger.info(
+            "Starting persistent X2DFD worker"
+        )
+
+        self._proc = (
+            await asyncio.create_subprocess_exec(
+                settings.X2PYTHON_BIN,
+
+                str(worker_script),
+
+                "--server",
+
+                "--lora-dir",
+                self.lora_dir,
+
+                "--base-model",
+                self.base_model,
+
+                "--max-new-tokens",
+                "32",
+
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+
+                # inherited by Uvicorn -> backend logfile
+                stderr=None,
+
+                cwd=settings.X2DFD_PROJECT_ROOT,
+                env=env,
             )
         )
 
-        payload = None
 
-        # Model libraries may log before JSON.
-        # Find the LAST valid score payload.
-        for line in reversed(
-            stdout.splitlines()
-        ):
-            line = line.strip()
+    async def _request(
+        self,
+        payload: dict,
+    ) -> dict:
 
-            if not line:
-                continue
+        async with self._request_lock:
 
-            try:
-                obj = json.loads(line)
-            except Exception:
-                continue
+            for attempt in range(2):
 
-            if (
-                isinstance(obj, dict)
-                and "real_score" in obj
-                and "fake_score" in obj
-            ):
-                payload = obj
-                break
+                await self._ensure_worker()
 
-        if payload is None:
+                proc = self._proc
+
+                try:
+
+                    if (
+                        proc.stdin is None
+                        or proc.stdout is None
+                    ):
+                        raise RuntimeError(
+                            "X2DFD worker pipes unavailable"
+                        )
+
+                    wire = (
+                        json.dumps(
+                            payload,
+                            ensure_ascii=False,
+                        )
+                        + "\n"
+                    ).encode()
+
+                    proc.stdin.write(wire)
+                    await proc.stdin.drain()
+
+                    raw = await asyncio.wait_for(
+                        proc.stdout.readline(),
+                        timeout=settings.IMAGE_INFERENCE_TIMEOUT_SEC,
+                    )
+
+                    if not raw:
+                        raise BrokenPipeError(
+                            "X2DFD worker closed stdout"
+                        )
+
+                    return json.loads(
+                        raw.decode("utf-8")
+                    )
+
+                except (
+                    BrokenPipeError,
+                    ConnectionResetError,
+                ):
+
+                    await self.stop_worker()
+
+                    if attempt == 1:
+                        raise
+
+                except asyncio.TimeoutError:
+
+                    await self.stop_worker()
+
+                    raise FinalScoreUnavailableError(
+                        "X2DFD persistent worker timed out"
+                    )
+
             raise FinalScoreUnavailableError(
-                "No valid final-score JSON "
-                "returned by X²-DFD"
+                "X2DFD persistent worker unavailable"
+            )
+
+
+    async def infer(
+        self,
+        image_path: Path,
+        selected_alias: str,
+        calibrated_score: float,
+    ) -> FinalResult:
+
+        image_path = (
+            Path(image_path)
+            .expanduser()
+            .resolve(strict=True)
+        )
+
+        if not image_path.is_file():
+            raise FinalScoreUnavailableError(
+                f"Input image missing: {image_path}"
+            )
+
+        prompt = self.build_wfs_prompt(
+            selected_alias,
+            calibrated_score,
+        )
+
+        response = await self._request(
+            {
+                "image": str(image_path),
+                "prompt": prompt,
+                "lora_dir": self.lora_dir,
+                "base_model": self.base_model,
+                "max_new_tokens": 32,
+            }
+        )
+
+        if not response.get("ok"):
+            raise FinalScoreUnavailableError(
+                "X2DFD worker failed: "
+                f"{response.get('error_type', 'Error')}: "
+                f"{response.get('error', 'unknown')}"
             )
 
         real, fake = self.validate_scores(
-            payload.get("real_score"),
-            payload.get("fake_score"),
+            response.get("real_score"),
+            response.get("fake_score"),
         )
 
         verdict = (
@@ -245,14 +349,13 @@ class X2DFDClient:
             else "REAL"
         )
 
-        explanation = (
-            self.extract_explanation(
-                payload.get("answer", "")
-            )
+        explanation = self.extract_explanation(
+            response.get("answer", "")
         )
 
         logger.info(
-            "FINAL X2DFD: real=%.8f fake=%.8f verdict=%s",
+            "FINAL X2DFD: "
+            "real=%.8f fake=%.8f verdict=%s",
             real,
             fake,
             verdict,
@@ -260,9 +363,12 @@ class X2DFDClient:
 
         return FinalResult(
             verdict=verdict,
+
             fake_probability=fake,
             real_probability=real,
+
             continuous_score=fake,
             decision_threshold=0.5,
+
             explanation=explanation,
         )

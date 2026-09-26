@@ -1,12 +1,27 @@
 import csv
 import math
 import tempfile
+
 from pathlib import Path
-from typing import Literal, Tuple
+
+from typing import (
+    Dict,
+    List,
+    Literal,
+    Tuple,
+)
 
 from web.backend.app.config import settings
 from web.backend.app.utils.logger import logger
 from web.backend.app.utils.subprocess_runner import SubprocessRunner
+
+
+ExpertName = Literal[
+    "blending",
+    "diffusion",
+    "frequency",
+    "texture",
+]
 
 
 class ExpertInferenceError(RuntimeError):
@@ -14,39 +29,40 @@ class ExpertInferenceError(RuntimeError):
 
 
 class ExpertClient:
-    """
-    LIVE dispatcher for the frozen Router4 expert pool.
 
-    Scientific invariants:
-      - exact selected expert only
-      - reuse research benchmark wrappers
-      - no placeholder/fallback score
-      - expert-specific calibration
-      - failure => fail closed
-    """
+    def __init__(
+        self,
+        calibrators_path: str = "",
+    ):
 
-    def __init__(self, calibrators_path: str = ""):
         self.calibrators_path = (
-            calibrators_path or settings.CALIBRATORS_PATH
+            calibrators_path
+            or settings.CALIBRATORS_PATH
         )
+
         self.calibrators = None
 
+
     def load_calibrators(self):
+
         if self.calibrators is not None:
             return
 
         import joblib
 
-        path = Path(self.calibrators_path)
+        path = Path(
+            self.calibrators_path
+        )
 
         if not path.exists():
-            raise FileNotFoundError(
-                f"Calibrator bundle missing: {path}"
-            )
+            raise FileNotFoundError(path)
 
         bundle = joblib.load(path)
 
-        if isinstance(bundle, dict) and "experts" in bundle:
+        if (
+            isinstance(bundle, dict)
+            and "experts" in bundle
+        ):
             self.calibrators = bundle["experts"]
         else:
             self.calibrators = bundle
@@ -58,12 +74,16 @@ class ExpertClient:
             "texture",
         }
 
-        missing = required - set(self.calibrators.keys())
+        missing = (
+            required
+            - set(self.calibrators.keys())
+        )
 
         if missing:
             raise ExpertInferenceError(
                 f"Missing calibrators: {sorted(missing)}"
             )
+
 
     def calibrate(
         self,
@@ -73,31 +93,36 @@ class ExpertClient:
 
         self.load_calibrators()
 
-        calibrated = float(
-            self.calibrators[expert]
-            .predict([float(raw_score)])[0]
+        value = float(
+            self.calibrators[
+                expert
+            ].predict(
+                [float(raw_score)]
+            )[0]
         )
 
-        if not math.isfinite(calibrated):
+        if not math.isfinite(value):
             raise ExpertInferenceError(
-                f"Non-finite calibrated score: {calibrated}"
+                "Non-finite calibrated score"
             )
 
-        if not 0.0 <= calibrated <= 1.0:
+        if not 0 <= value <= 1:
             raise ExpertInferenceError(
-                f"Calibrated score outside [0,1]: {calibrated}"
+                "Calibrated score outside [0,1]"
             )
 
-        return round(calibrated, 8)
+        return round(value, 8)
+
 
     @staticmethod
     def _write_manifest(
-        output_dir: Path,
-        image_path: Path,
+        out: Path,
+        paths: List[Path],
     ):
-        manifest = output_dir / "manifest.csv"
 
-        with manifest.open(
+        with (
+            out / "manifest.csv"
+        ).open(
             "w",
             newline="",
             encoding="utf-8",
@@ -110,189 +135,252 @@ class ExpertClient:
 
             writer.writeheader()
 
-            writer.writerow({
-                "image_path": str(image_path.resolve())
-            })
+            for p in paths:
+
+                writer.writerow(
+                    {
+                        "image_path":
+                            str(
+                                Path(p)
+                                .expanduser()
+                                .resolve(strict=True)
+                            )
+                    }
+                )
+
 
     @staticmethod
-    def _read_score(
+    def _read_scores(
         csv_path: Path,
-        image_path: Path,
-    ) -> float:
+        paths: List[Path],
+    ) -> Dict[str, float]:
 
         if not csv_path.exists():
             raise ExpertInferenceError(
                 f"Expert output missing: {csv_path}"
             )
 
+        expected = [
+            str(
+                Path(p)
+                .expanduser()
+                .resolve(strict=True)
+            )
+            for p in paths
+        ]
+
+        found = {}
+
         with csv_path.open(
             newline="",
             encoding="utf-8",
         ) as f:
-            rows = list(csv.DictReader(f))
 
-        target = str(image_path.resolve())
+            for row in csv.DictReader(f):
 
-        for row in rows:
-            if row.get("image_path") == target:
-                value = float(row["score"])
+                path = row.get("image_path")
+                raw = row.get("score")
 
-                if not math.isfinite(value):
+                if not path or raw in (None, ""):
+                    continue
+
+                score = float(raw)
+
+                if not math.isfinite(score):
                     raise ExpertInferenceError(
-                        f"Non-finite raw score: {value}"
+                        "Non-finite expert score"
                     )
 
-                return value
+                found[path] = score
 
-        if len(rows) == 1:
-            value = float(rows[0]["score"])
+        missing = [
+            p for p in expected
+            if p not in found
+        ]
 
-            if math.isfinite(value):
-                return value
+        if missing:
+            raise ExpertInferenceError(
+                f"Expert produced {len(found)}/"
+                f"{len(expected)} scores. "
+                f"Missing: {missing[:3]}"
+            )
 
-        raise ExpertInferenceError(
-            f"No expert score for {target}"
-        )
+        return {
+            p: found[p]
+            for p in expected
+        }
 
-    async def compute_expert_score(
+
+    def _command(
         self,
-        expert: Literal[
-            "blending",
-            "diffusion",
-            "frequency",
-            "texture",
-        ],
-        image_path: Path,
-    ) -> Tuple[float, float]:
-
-        raw = await self._run_expert_inference(
-            expert,
-            image_path,
-        )
-
-        calibrated = self.calibrate(
-            expert,
-            raw,
-        )
-
-        logger.info(
-            "Expert %s: raw=%.8f calibrated=%.8f",
-            expert,
-            raw,
-            calibrated,
-        )
-
-        return raw, calibrated
-
-    async def _run_expert_inference(
-        self,
-        expert: str,
-        image_path: Path,
-    ) -> float:
-
-        if not image_path.exists():
-            raise FileNotFoundError(image_path)
+        expert: ExpertName,
+        out: Path,
+    ):
 
         wrappers = Path(
             settings.ROUTER8_WRAPPER_ROOT
         )
 
+        if expert in (
+            "blending",
+            "diffusion",
+        ):
+
+            wrapper = wrappers / "run_x2.py"
+
+            cmd = [
+                settings.X2PYTHON_BIN,
+                str(wrapper),
+                "--out",
+                str(out),
+                "--expert",
+                expert,
+            ]
+
+            cwd = settings.X2DFD_PROJECT_ROOT
+            csv_path = out / f"{expert}_scores.csv"
+
+
+        elif expert == "frequency":
+
+            wrapper = wrappers / "run_frequency.py"
+
+            cmd = [
+                settings.FREQPYTHON_BIN,
+                str(wrapper),
+                "--out",
+                str(out),
+                "--name",
+                "SAFEVISION_VIDEO_BATCH",
+            ]
+
+            cwd = settings.DFFREQ_PROJECT_ROOT
+            csv_path = out / "frequency_scores.csv"
+
+
+        elif expert == "texture":
+
+            wrapper = wrappers / "run_texture.py"
+
+            cmd = [
+                settings.TEXPYTHON_BIN,
+                str(wrapper),
+                "--out",
+                str(out),
+                "--work",
+                settings.TEXTURE_PROJECT_ROOT,
+            ]
+
+            cwd = settings.TEXTURE_PROJECT_ROOT
+            csv_path = out / "texture_scores.csv"
+
+
+        else:
+            raise ExpertInferenceError(
+                f"Unknown expert: {expert}"
+            )
+
+        if not wrapper.exists():
+            raise FileNotFoundError(wrapper)
+
+        return cmd, cwd, csv_path
+
+
+    async def compute_expert_scores_batch(
+        self,
+        expert: ExpertName,
+        image_paths: List[Path],
+    ) -> Dict[str, Tuple[float, float]]:
+
+        if not image_paths:
+            return {}
+
+        paths = [
+            Path(p)
+            .expanduser()
+            .resolve(strict=True)
+            for p in image_paths
+        ]
+
         with tempfile.TemporaryDirectory(
-            prefix=f"safevision_{expert}_"
+            prefix=f"safevision_{expert}_batch_"
         ) as tmp:
 
             out = Path(tmp)
 
             self._write_manifest(
                 out,
-                image_path,
+                paths,
             )
 
-            if expert in {
-                "blending",
-                "diffusion",
-            }:
-
-                wrapper = wrappers / "run_x2.py"
-
-                cmd = [
-                    settings.X2PYTHON_BIN,
-                    str(wrapper),
-                    "--out",
-                    str(out),
-                    "--expert",
+            cmd, cwd, csv_path = (
+                self._command(
                     expert,
-                ]
-
-                cwd = settings.X2DFD_PROJECT_ROOT
-
-                csv_path = (
-                    out
-                    / f"{expert}_scores.csv"
+                    out,
                 )
+            )
 
-            elif expert == "frequency":
-
-                wrapper = (
-                    wrappers
-                    / "run_frequency.py"
-                )
-
-                cmd = [
-                    settings.FREQPYTHON_BIN,
-                    str(wrapper),
-                    "--out",
-                    str(out),
-                    "--name",
-                    "SAFEVISION_WEB_SINGLE",
-                ]
-
-                cwd = settings.DFFREQ_PROJECT_ROOT
-
-                csv_path = (
-                    out / "frequency_scores.csv"
-                )
-
-            elif expert == "texture":
-
-                wrapper = (
-                    wrappers
-                    / "run_texture.py"
-                )
-
-                cmd = [
-                    settings.TEXPYTHON_BIN,
-                    str(wrapper),
-                    "--out",
-                    str(out),
-                    "--work",
-                    settings.TEXTURE_PROJECT_ROOT,
-                ]
-
-                cwd = settings.TEXTURE_PROJECT_ROOT
-
-                csv_path = (
-                    out / "texture_scores.csv"
-                )
-
-            else:
-                raise ExpertInferenceError(
-                    f"Unknown expert: {expert}"
-                )
-
-            if not wrapper.exists():
-                raise FileNotFoundError(wrapper)
+            logger.info(
+                "Batch expert %s: %d frame(s)",
+                expert,
+                len(paths),
+            )
 
             await SubprocessRunner.run(
                 cmd,
+
                 timeout=settings.EXPERT_INFERENCE_TIMEOUT_SEC,
+
                 cwd=cwd,
+
                 custom_env={
                     "PYTHONPATH": cwd,
                 },
             )
 
-            return self._read_score(
+            raw_scores = self._read_scores(
                 csv_path,
-                image_path,
+                paths,
             )
+
+        result = {}
+
+        for p in paths:
+
+            key = str(p)
+
+            raw = raw_scores[key]
+
+            calibrated = self.calibrate(
+                expert,
+                raw,
+            )
+
+            result[key] = (
+                raw,
+                calibrated,
+            )
+
+        return result
+
+
+    async def compute_expert_score(
+        self,
+        expert: ExpertName,
+        image_path: Path,
+    ) -> Tuple[float, float]:
+
+        p = (
+            Path(image_path)
+            .expanduser()
+            .resolve(strict=True)
+        )
+
+        result = (
+            await self.compute_expert_scores_batch(
+                expert,
+                [p],
+            )
+        )
+
+        return result[str(p)]

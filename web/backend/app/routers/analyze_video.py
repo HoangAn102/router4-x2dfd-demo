@@ -40,25 +40,57 @@ async def _run_video_background_task(job_id: str, video_path: Path):
         total_frames = len(extracted_data)
         frames = []
 
-        # Stage 2: Per-frame inference loop
-        for item in extracted_data:
-            idx = item["frame_index"]
-            timestamp = item["timestamp_seconds"]
-            frame_path = item["frame_path"]
-            thumb_b64 = item["thumbnail_b64"]
+        # Stage 2:
+        # LIVE worker uses batch-compute optimization while preserving
+        # an independent Router/Expert/X2DFD result for every frame.
+        if hasattr(worker, "analyze_video_batch"):
 
-            job_manager.update_progress(
-                job_id,
-                stage="analyzing_frames",
-                current_frame=idx + 1,
-                total_frames=total_frames,
+            def progress_callback(
+                current,
+                total,
+                stage,
+            ):
+                job_manager.update_progress(
+                    job_id,
+                    stage=stage,
+                    current_frame=current,
+                    total_frames=total,
+                )
+
+            frames = await worker.analyze_video_batch(
+                extracted_data,
+                progress_callback=progress_callback,
             )
-            # Analyze each frame through pipeline
-            frame_res = await worker.analyze_video_frame(frame_path, idx, timestamp)
-            frame_res.thumbnail_b64 = thumb_b64
-            frames.append(frame_res)
-            # Brief yield to event loop
-            await asyncio.sleep(0.01)
+
+        else:
+
+            # Compatibility path used by mock/tests only.
+            for item in extracted_data:
+
+                idx = item["frame_index"]
+                timestamp = item["timestamp_seconds"]
+                frame_path = item["frame_path"]
+                thumb_b64 = item["thumbnail_b64"]
+
+                job_manager.update_progress(
+                    job_id,
+                    stage="analyzing_frames",
+                    current_frame=idx + 1,
+                    total_frames=total_frames,
+                )
+
+                frame_res = (
+                    await worker.analyze_video_frame(
+                        frame_path,
+                        idx,
+                        timestamp,
+                    )
+                )
+
+                frame_res.thumbnail_b64 = thumb_b64
+                frames.append(frame_res)
+
+                await asyncio.sleep(0.01)
 
         # Stage 3: Aggregation Gate
         job_manager.update_progress(job_id, stage="aggregating_results", current_frame=total_frames, total_frames=total_frames)

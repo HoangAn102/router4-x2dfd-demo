@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { UploadCloud, Image as ImageIcon, Video as VideoIcon, X, Sparkles, AlertCircle } from 'lucide-react';
 
 const MAX_IMAGE_MB = 20;
@@ -16,6 +16,27 @@ export default function Dropzone({
   const [isDragActive, setIsDragActive] = useState(false);
   const [validationError, setValidationError] = useState(null);
   const fileInputRef = useRef(null);
+
+  // Stable preview URL.
+  //
+  // Previously URL.createObjectURL(selectedFile) ran inside JSX.
+  // Every progress update caused a React re-render and created a new
+  // blob URL, forcing the <video> decoder to reload/reseek.
+  const [previewUrl, setPreviewUrl] = useState(null);
+
+  useEffect(() => {
+    if (!selectedFile) {
+      setPreviewUrl(null);
+      return;
+    }
+
+    const url = URL.createObjectURL(selectedFile);
+    setPreviewUrl(url);
+
+    return () => {
+      URL.revokeObjectURL(url);
+    };
+  }, [selectedFile]);
 
   const isImageTab = activeTab === 'image';
   const acceptedTypes = isImageTab
@@ -160,15 +181,16 @@ export default function Dropzone({
           <div className="preview-media-wrapper">
             {isImageTab ? (
               <img
-                src={URL.createObjectURL(selectedFile)}
+                src={previewUrl || undefined}
                 alt="Upload preview"
               />
             ) : (
               <video
                 ref={videoRef}
-                src={URL.createObjectURL(selectedFile)}
+                src={previewUrl || undefined}
                 controls
                 playsInline
+                preload="metadata"
               />
             )}
           </div>

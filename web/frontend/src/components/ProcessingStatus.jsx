@@ -16,8 +16,17 @@ export default function ProcessingStatus({ isVideo, progress }) {
     } else if (stage === 'extracting_frames') {
       stageLabel = 'Đang trích xuất 32 frame chuẩn DeepfakeBench...';
       stageIcon = <Film size={24} color="#6366f1" />;
+    } else if (stage === 'routing_frames') {
+      stageLabel = `Router4 đang định tuyến frame ${current} / ${total}...`;
+      stageIcon = <Layers size={24} color="#6366f1" />;
+    } else if (stage === 'scoring_experts') {
+      stageLabel = `Đang chạy nhóm expert ${current} / ${total}...`;
+      stageIcon = <Layers size={24} color="#f59e0b" />;
+    } else if (stage === 'loading_x2dfd') {
+      stageLabel = 'Đang chuẩn bị X²-DFD + LLaVA trên GPU...';
+      stageIcon = <Loader2 size={24} className="radar-ring" color="#8b5cf6" />;
     } else if (stage === 'analyzing_frames') {
-      stageLabel = `Đang giám định frame ${current} / ${total}...`;
+      stageLabel = `X²-DFD đang giám định frame ${current} / ${total}...`;
       stageIcon = <Layers size={24} color="#ec4899" />;
     } else if (stage === 'aggregating_results') {
       stageLabel = 'Đang tổng hợp pháp y và kiểm định an toàn...';
@@ -44,11 +53,11 @@ export default function ProcessingStatus({ isVideo, progress }) {
 
       <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem' }}>
         {isVideo
-          ? 'Quá trình trích xuất và giám định diễn ra tuần tự từng frame để đảm bảo tính chính xác.'
+          ? 'Router4 xử lý từng frame; các frame cùng expert được gom batch và X²-DFD tái sử dụng model đã nạp trên GPU.'
           : 'Hệ thống đang trích xuất đặc trưng pixel, tần số và suy luận đa phương thức.'}
       </p>
 
-      {isVideo && stage === 'analyzing_frames' && (
+      {isVideo && ['routing_frames', 'scoring_experts', 'loading_x2dfd', 'analyzing_frames'].includes(stage) && (
         <>
           <div className="progress-track">
             <div className="progress-fill" style={{ width: `${percent}%` }} />

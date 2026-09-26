@@ -66,6 +66,14 @@ export default function App() {
   const handleAnalyze = async () => {
     if (!selectedFile) return;
 
+    // Do not spend phone/laptop resources decoding the local video
+    // while the remote GPU is doing inference.
+    if (activeTab === 'video' && videoRef.current) {
+      try {
+        videoRef.current.pause();
+      } catch (_) {}
+    }
+
     setIsLoading(true);
     setError(null);
     setProgress(null);

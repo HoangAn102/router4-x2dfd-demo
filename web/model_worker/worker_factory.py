@@ -1,29 +1,61 @@
+from typing import Optional
+
 from web.backend.app.config import settings
 from web.backend.app.utils.logger import logger
+
 from .base import BaseModelWorker
 from .mock_worker import MockModelWorker
 
 
+_LIVE_WORKER: Optional[BaseModelWorker] = None
+_MOCK_WORKER: Optional[BaseModelWorker] = None
+
+
 def get_model_worker() -> BaseModelWorker:
-    """Factory function returning the configured model worker with Production Guard."""
+    """
+    One process-local worker.
+
+    Production uses exactly one Uvicorn worker, therefore Router4,
+    calibrators and the X2DFD client can safely persist across requests.
+    """
+
+    global _LIVE_WORKER
+    global _MOCK_WORKER
+
     mode = settings.RUN_MODE.lower()
-    logger.info(f"Initializing Model Worker for RUN_MODE='{mode}'")
 
     if mode == "mock":
-        return MockModelWorker()
+
+        if _MOCK_WORKER is None:
+            logger.info("Creating singleton MockModelWorker")
+            _MOCK_WORKER = MockModelWorker()
+
+        return _MOCK_WORKER
 
     if mode == "live":
-        try:
-            from .live_worker import LiveModelWorker
-            return LiveModelWorker()
-        except Exception as e:
-            logger.critical(
-                f"Production Guard: Failed to initialize LiveModelWorker in RUN_MODE='live': {e}"
-            )
-            # NEVER fallback to mock in live mode!
-            raise RuntimeError(
-                f"Production Guard Violation: RUN_MODE='live' is configured, but LiveModelWorker "
-                f"cannot be loaded: {e}. Refusing to start with mock worker."
-            ) from e
 
-    raise ValueError(f"Unknown RUN_MODE '{settings.RUN_MODE}'. Must be 'mock' or 'live'.")
+        if _LIVE_WORKER is None:
+
+            logger.info("Creating singleton LiveModelWorker")
+
+            try:
+                from .live_worker import LiveModelWorker
+                _LIVE_WORKER = LiveModelWorker()
+
+            except Exception as e:
+
+                logger.critical(
+                    "LiveModelWorker initialization failed: %s",
+                    e,
+                )
+
+                raise RuntimeError(
+                    "RUN_MODE='live' but LiveModelWorker "
+                    "cannot initialize. Mock fallback refused."
+                ) from e
+
+        return _LIVE_WORKER
+
+    raise ValueError(
+        f"Unknown RUN_MODE={settings.RUN_MODE!r}"
+    )

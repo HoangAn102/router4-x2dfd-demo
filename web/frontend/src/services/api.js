@@ -1,89 +1,134 @@
 /**
- * SafeVision API Client
+ * SafeVision browser API.
  *
- * Frontend: Render
- * Real AI inference: PTNK GPU server
+ * Browser -> SAME ORIGIN Render -> GPU proxy -> PTNK GPU.
  */
 
-const DEFAULT_API_ORIGIN = 'https://gains-how-cheque-enquiry.trycloudflare.com';
+const API_BASE = '/gpu-api/api/v1';
 
-const API_ORIGIN = (
-  import.meta.env.VITE_API_ORIGIN ||
-  DEFAULT_API_ORIGIN
-).replace(/\/+$/, '');
 
-const API_BASE = `${API_ORIGIN}/api/v1`;
-
-function resolveApiUrl(url) {
+function proxyPollUrl(url) {
   if (!url) return url;
 
-  if (/^https?:\/\//i.test(url)) {
-    return url;
+  // GPU backend normally returns /api/v1/...
+  if (url.startsWith('/api/v1/')) {
+    return `/gpu-api${url}`;
   }
 
-  return `${API_ORIGIN}${url}`;
+  // Defensive support if an absolute upstream URL is returned.
+  if (/^https?:\/\//i.test(url)) {
+    const parsed = new URL(url);
+    return `/gpu-api${parsed.pathname}${parsed.search}`;
+  }
+
+  return url;
 }
 
+
 export class ApiError extends Error {
-  constructor(message, errorDetail = {}) {
+  constructor(message, detail = {}) {
     super(message);
 
     this.name = 'ApiError';
+
     this.code =
-      errorDetail.code || 'UNKNOWN_ERROR';
+      detail.code ||
+      'UNKNOWN_ERROR';
+
     this.stage =
-      errorDetail.stage || 'client_request';
+      detail.stage ||
+      'client_request';
+
     this.requestId =
-      errorDetail.request_id || null;
+      detail.request_id ||
+      null;
+
     this.details =
-      errorDetail.details || null;
+      detail.details ||
+      null;
   }
 }
 
+
+async function safeFetch(url, options = {}) {
+  try {
+    return await fetch(
+      url,
+      options
+    );
+
+  } catch (err) {
+
+    throw new ApiError(
+      'Không thể kết nối đến máy chủ giám định AI.',
+      {
+        code: 'NETWORK_ERROR',
+        stage: 'request_pipeline',
+        details:
+          err?.message ||
+          'Browser network error',
+      }
+    );
+  }
+}
+
+
+function extractDetail(data) {
+  return (
+    data?.detail ||
+    data?.error ||
+    {}
+  );
+}
+
+
 export async function checkHealth() {
   try {
-    const res = await fetch(
+    const res = await safeFetch(
       `${API_BASE}/health`
     );
 
     if (!res.ok) {
       throw new Error(
-        `Health check failed: ${res.status}`
+        `Health ${res.status}`
       );
     }
 
     return await res.json();
 
   } catch (err) {
+
     console.warn(
-      'Health check error:',
+      'Health check:',
       err
     );
 
     return {
       status: 'offline',
-      run_mode: 'unknown'
+      run_mode: 'unknown',
     };
   }
 }
 
+
 export async function checkReadiness() {
   try {
-    const res = await fetch(
+    const res = await safeFetch(
       `${API_BASE}/ready`
     );
 
     if (!res.ok) {
       throw new Error(
-        `Readiness check failed: ${res.status}`
+        `Ready ${res.status}`
       );
     }
 
     return await res.json();
 
   } catch (err) {
+
     console.warn(
-      'Readiness check error:',
+      'Readiness:',
       err
     );
 
@@ -91,24 +136,25 @@ export async function checkReadiness() {
       status: 'not_ready',
       run_mode: 'unknown',
       all_ready: false,
-      components: {}
+      components: {},
     };
   }
 }
 
-export async function analyzeImage(file) {
-  const formData = new FormData();
 
-  formData.append(
+export async function analyzeImage(file) {
+  const body = new FormData();
+
+  body.append(
     'file',
     file
   );
 
-  const res = await fetch(
+  const res = await safeFetch(
     `${API_BASE}/analyze/image`,
     {
       method: 'POST',
-      body: formData
+      body,
     }
   );
 
@@ -117,10 +163,9 @@ export async function analyzeImage(file) {
     .catch(() => null);
 
   if (!res.ok) {
+
     const detail =
-      data?.detail ||
-      data?.error ||
-      {};
+      extractDetail(data);
 
     throw new ApiError(
       detail.message ||
@@ -132,23 +177,24 @@ export async function analyzeImage(file) {
   return data;
 }
 
+
 export async function analyzeVideo(
   file,
   onProgress = () => {},
   pollIntervalMs = 1200
 ) {
-  const formData = new FormData();
+  const body = new FormData();
 
-  formData.append(
+  body.append(
     'file',
     file
   );
 
-  const submitRes = await fetch(
+  const submitRes = await safeFetch(
     `${API_BASE}/analyze/video`,
     {
       method: 'POST',
-      body: formData
+      body,
     }
   );
 
@@ -157,10 +203,11 @@ export async function analyzeVideo(
     .catch(() => null);
 
   if (!submitRes.ok) {
+
     const detail =
-      submitData?.detail ||
-      submitData?.error ||
-      {};
+      extractDetail(
+        submitData
+      );
 
     throw new ApiError(
       detail.message ||
@@ -171,12 +218,16 @@ export async function analyzeVideo(
 
   const {
     job_id,
-    poll_url
+    poll_url,
   } = submitData;
 
   if (!job_id) {
     throw new ApiError(
-      'Backend did not return job_id.'
+      'Backend did not return job_id.',
+      {
+        code: 'MISSING_JOB_ID',
+        stage: 'video_submit',
+      }
     );
   }
 
@@ -185,38 +236,38 @@ export async function analyzeVideo(
     current: 0,
     total: 32,
     status: 'processing',
-    message: 'Đã nhận video vào hàng đợi...'
+    message: 'Đã nhận video...',
   });
 
   return new Promise(
     (resolve, reject) => {
 
       const poll = async () => {
+
         try {
-          const pollTarget = resolveApiUrl(
+
+          const target = proxyPollUrl(
             poll_url ||
             `/api/v1/analyze/video/jobs/${job_id}`
           );
 
-          const pollRes = await fetch(
-            pollTarget
+          const res = await safeFetch(
+            target
           );
 
-          const job =
-            await pollRes
-              .json()
-              .catch(() => null);
+          const job = await res
+            .json()
+            .catch(() => null);
 
-          if (!pollRes.ok) {
+          if (!res.ok) {
+
             const detail =
-              job?.detail ||
-              job?.error ||
-              {};
+              extractDetail(job);
 
             reject(
               new ApiError(
                 detail.message ||
-                `Polling failed (${pollRes.status})`,
+                `Polling failed (${res.status})`,
                 detail
               )
             );
@@ -230,10 +281,13 @@ export async function analyzeVideo(
             current_frame,
             total_frames,
             result,
-            error
+            error,
           } = job;
 
-          if (status === 'processing') {
+          if (
+            status === 'processing'
+          ) {
+
             onProgress({
               stage:
                 stage ||
@@ -246,7 +300,7 @@ export async function analyzeVideo(
                 total_frames || 32,
 
               status:
-                'processing'
+                'processing',
             });
 
             setTimeout(
@@ -261,13 +315,14 @@ export async function analyzeVideo(
             status === 'completed' ||
             status === 'blocked'
           ) {
+
             onProgress({
               stage: 'finished',
               current:
                 total_frames || 32,
               total:
                 total_frames || 32,
-              status
+              status,
             });
 
             resolve(result);
@@ -275,7 +330,10 @@ export async function analyzeVideo(
             return;
           }
 
-          if (status === 'failed') {
+          if (
+            status === 'failed'
+          ) {
+
             reject(
               new ApiError(
                 error?.message ||
@@ -293,11 +351,19 @@ export async function analyzeVideo(
           );
 
         } catch (err) {
+
           reject(
             err instanceof ApiError
               ? err
               : new ApiError(
-                  err.message
+                  err?.message ||
+                  'Video polling error',
+                  {
+                    code:
+                      'VIDEO_POLL_ERROR',
+                    stage:
+                      'request_pipeline',
+                  }
                 )
           );
         }

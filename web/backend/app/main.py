@@ -12,7 +12,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from .config import settings
-from .routers import analyze_image, analyze_video, health
+from .routers import analyze_image, analyze_video, health, gpu_proxy
 from .schemas.common import ErrorDetail, ErrorResponse
 from .services.file_manager import cleanup_stale_temp_dirs, ensure_upload_dir
 from .services.job_manager import job_manager
@@ -72,6 +72,8 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 # Register Routers
+# Render same-origin proxy is intentionally a distinct /gpu-api path.
+app.include_router(gpu_proxy.router)
 app.include_router(health.router)
 app.include_router(analyze_image.router)
 app.include_router(analyze_video.router)

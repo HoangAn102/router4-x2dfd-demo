@@ -46,3 +46,19 @@ node_modules/
 .next/
 dist/
 build/
+
+# ------------------------------------------------------------
+# SafeVision runtime artifacts — never commit
+# ------------------------------------------------------------
+/safevision_*.log
+/safevision_*.lock
+/gpu.lock
+/uploads/
+/teacher_demo_audit/
+
+# SafeVision runtime-only files
+/safevision_*.log
+/safevision_*.lock
+/gpu.lock
+/uploads/
+/teacher_demo_audit/

@@ -350,6 +350,7 @@ body {
 }
 
 .preview-media-wrapper {
+  contain: layout paint;
   max-width: 480px;
   max-height: 320px;
   width: 100%;
@@ -478,9 +479,10 @@ body {
 
 .progress-fill {
   height: 100%;
+  will-change: width;
   background: var(--accent-gradient);
   border-radius: var(--radius-full);
-  transition: width 0.4s ease;
+  transition: width 0.75s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* Result Cards */
