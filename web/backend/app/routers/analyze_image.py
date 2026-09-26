@@ -49,7 +49,16 @@ async def analyze_image_endpoint(file: UploadFile = File(...)):
 
         # Validation stage
         try:
-            MediaValidator.validate_image_file(file_path)
+            final_width, final_height = MediaValidator.prepare_image_file(
+                file_path
+            )
+
+            logger.info(
+                "Prepared image %s for inference: %dx%d",
+                request_id,
+                final_width,
+                final_height,
+            )
         except MediaValidationError as mve:
             logger.warning(f"Media validation failed for {request_id}: {mve.code} - {mve.message}")
             return JSONResponse(

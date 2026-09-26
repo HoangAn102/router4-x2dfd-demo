@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 from typing import Tuple
-from PIL import Image
+from PIL import Image, ImageOps
 from ..config import settings
 
 
@@ -65,6 +65,144 @@ class MediaValidator:
             )
 
         return width, height
+
+
+    @classmethod
+    def prepare_image_file(cls, file_path: Path) -> Tuple[int, int]:
+        """
+        Validate an uploaded image and deterministically normalize only
+        images whose longest side exceeds MAX_IMAGE_DIMENSION.
+
+        Scientific/runtime invariant:
+          - preserve aspect ratio
+          - no crop
+          - no stretching
+          - no label/score manipulation
+          - only spatial down-sampling
+        """
+
+        try:
+            return cls.validate_image_file(file_path)
+
+        except MediaValidationError as exc:
+
+            if exc.code != "IMAGE_DIMENSION_EXCEEDED":
+                raise
+
+        # The image already passed:
+        # - file existence
+        # - size limit
+        # - magic-byte validation
+        # - decode verification
+        #
+        # Only its spatial dimensions are too large.
+
+        try:
+            with Image.open(file_path) as src:
+
+                original_format = (
+                    src.format or "JPEG"
+                ).upper()
+
+                img = ImageOps.exif_transpose(src)
+                original_w, original_h = img.size
+
+                max_dim = int(
+                    settings.MAX_IMAGE_DIMENSION
+                )
+
+                scale = min(
+                    max_dim / original_w,
+                    max_dim / original_h,
+                )
+
+                new_w = max(
+                    1,
+                    int(round(original_w * scale)),
+                )
+
+                new_h = max(
+                    1,
+                    int(round(original_h * scale)),
+                )
+
+                resized = img.resize(
+                    (new_w, new_h),
+                    Image.Resampling.LANCZOS,
+                )
+
+                tmp_path = file_path.with_suffix(
+                    file_path.suffix + ".normalized"
+                )
+
+                save_kwargs = {}
+
+                if original_format in {
+                    "JPEG",
+                    "JPG",
+                }:
+                    if resized.mode not in {
+                        "RGB",
+                        "L",
+                    }:
+                        resized = resized.convert(
+                            "RGB"
+                        )
+
+                    save_kwargs.update(
+                        quality=95,
+                        subsampling=0,
+                        optimize=True,
+                    )
+
+                    fmt = "JPEG"
+
+                elif original_format == "PNG":
+                    fmt = "PNG"
+                    save_kwargs.update(
+                        optimize=True
+                    )
+
+                elif original_format == "WEBP":
+                    fmt = "WEBP"
+                    save_kwargs.update(
+                        quality=95,
+                        method=6,
+                    )
+
+                else:
+                    raise MediaValidationError(
+                        "INVALID_IMAGE_FORMAT",
+                        f"Unsupported decoded image format: {original_format}"
+                    )
+
+                resized.save(
+                    tmp_path,
+                    format=fmt,
+                    **save_kwargs,
+                )
+
+                tmp_path.replace(
+                    file_path
+                )
+
+        except MediaValidationError:
+            raise
+
+        except Exception as exc:
+            raise MediaValidationError(
+                "IMAGE_NORMALIZATION_FAILED",
+                f"Large image could not be normalized: {exc}",
+            )
+
+        # Re-run full validation against the normalized artifact.
+        final_w, final_h = (
+            cls.validate_image_file(
+                file_path
+            )
+        )
+
+        return final_w, final_h
 
     @classmethod
     def validate_video_file(cls, file_path: Path) -> Tuple[float, int, float]:
