@@ -99,7 +99,10 @@ async def proxy_gpu_api(
         k: v
         for k, v in request.headers.items()
         if k.lower() not in _HOP_BY_HOP
-        and k.lower() != "origin"
+        and k.lower() not in {
+            "origin",
+            "accept-encoding",
+        }
     }
 
     timeout = httpx.Timeout(
@@ -180,8 +183,14 @@ async def proxy_gpu_api(
         )
     )
 
+    # SAFEVISION_PROXY_DECOMPRESSION_V1
+    #
+    # Never forward undecoded compressed wire bytes without the
+    # matching Content-Encoding header. aiter_bytes() gives the
+    # decoded response body expected by browser response.json().
+    #
     return StreamingResponse(
-        upstream.aiter_raw(),
+        upstream.aiter_bytes(),
         status_code=upstream.status_code,
         headers=response_headers,
         media_type=media_type,
