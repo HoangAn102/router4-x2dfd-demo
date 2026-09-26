@@ -4,6 +4,15 @@ import { UploadCloud, Image as ImageIcon, Video as VideoIcon, X, Sparkles, Alert
 const MAX_IMAGE_MB = 20;
 const MAX_VIDEO_MB = 100;
 
+const SUPPORTED_IMAGE_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+]);
+
+const SUPPORTED_IMAGE_NAME_RE = /\.(jpe?g|png|webp|mpo)$/i;
+const HEIC_HEIF_NAME_RE = /\.(heic|heif)$/i;
+
 export default function Dropzone({
   activeTab,
   onTabChange,
@@ -40,7 +49,7 @@ export default function Dropzone({
 
   const isImageTab = activeTab === 'image';
   const acceptedTypes = isImageTab
-    ? 'image/jpeg,image/png,image/webp'
+    ? 'image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp,.mpo'
     : 'video/mp4,video/avi,video/quicktime,video/x-matroska';
 
   const validateAndSetFile = (file) => {
@@ -49,10 +58,31 @@ export default function Dropzone({
 
     const sizeMB = file.size / (1024 * 1024);
     if (isImageTab) {
-      if (!file.type.startsWith('image/')) {
-        setValidationError('Vui lòng chọn tệp hình ảnh hợp lệ (JPEG, PNG, WEBP).');
+      const isHeicHeif =
+        file.type === 'image/heic' ||
+        file.type === 'image/heif' ||
+        HEIC_HEIF_NAME_RE.test(file.name);
+
+      if (isHeicHeif) {
+        setValidationError(
+          'HEIC/HEIF chưa được detector web hỗ trợ trực tiếp. Hãy xuất/chia sẻ ảnh dưới dạng JPG, PNG hoặc WEBP.'
+        );
         return;
       }
+
+      const supportedByMime =
+        SUPPORTED_IMAGE_MIME_TYPES.has(file.type);
+
+      const supportedByName =
+        SUPPORTED_IMAGE_NAME_RE.test(file.name);
+
+      if (!supportedByMime && !supportedByName) {
+        setValidationError(
+          'Định dạng ảnh chưa được hỗ trợ. Hỗ trợ: JPG/JPEG/MPO, PNG, WEBP.'
+        );
+        return;
+      }
+
       if (sizeMB > MAX_IMAGE_MB) {
         setValidationError(`Dung lượng ảnh (${sizeMB.toFixed(1)}MB) vượt quá giới hạn ${MAX_IMAGE_MB}MB.`);
         return;
@@ -163,7 +193,7 @@ export default function Dropzone({
           </p>
 
           <div className="dropzone-limits">
-            <span>Định dạng: {isImageTab ? 'JPG, PNG, WEBP' : 'MP4, AVI, MOV, MKV'}</span>
+            <span>Định dạng: {isImageTab ? 'JPG/JPEG/MPO, PNG, WEBP' : 'MP4, AVI, MOV, MKV'}</span>
             <span>•</span>
             <span>Tối đa: {isImageTab ? `${MAX_IMAGE_MB}MB` : `${MAX_VIDEO_MB}MB (≤ 60s)`}</span>
           </div>

@@ -1,4 +1,5 @@
 import uuid
+from pathlib import Path
 from fastapi import APIRouter, File, HTTPException, UploadFile, status
 from fastapi.responses import JSONResponse
 from ..schemas.common import ErrorDetail, ErrorResponse
@@ -25,7 +26,13 @@ async def analyze_image_endpoint(file: UploadFile = File(...)):
     logger.info(f"Received image analysis request: {request_id} (filename={file.filename})")
 
     async with isolated_temp_workspace(prefix=f"img_{request_id[:8]}") as workspace:
-        file_path = workspace / (file.filename or "upload.jpg")
+        raw_name = file.filename or "upload.jpg"
+        safe_name = Path(raw_name).name
+
+        if safe_name in {"", ".", ".."}:
+            safe_name = "upload.jpg"
+
+        file_path = workspace / safe_name
 
         # Stream save file
         try:

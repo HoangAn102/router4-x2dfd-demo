@@ -173,7 +173,16 @@ async def analyze_video_endpoint(
 
     # Save to staging upload directory
     upload_root = ensure_upload_dir()
-    staging_file = upload_root / f"job_{job_id}_{file.filename or 'upload.mp4'}"
+    raw_name = file.filename or "upload.mp4"
+    safe_name = Path(raw_name).name
+
+    if safe_name in {"", ".", ".."}:
+        safe_name = "upload.mp4"
+
+    staging_file = (
+        upload_root
+        / f"job_{job_id}_{safe_name}"
+    )
 
     try:
         with open(staging_file, "wb") as buffer:
