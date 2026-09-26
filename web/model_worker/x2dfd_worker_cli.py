@@ -207,7 +207,7 @@ def main():
     parser.add_argument(
         "--max-new-tokens",
         type=int,
-        default=32,
+        default=96,
     )
 
     args = parser.parse_args()

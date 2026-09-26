@@ -17,6 +17,13 @@ class FinalScoreUnavailableError(Exception):
 
 class X2DFDClient:
 
+    # Text-generation budget only.
+    #
+    # This does NOT alter the REAL/FAKE continuous score logic.
+    # The score is still extracted at the actual generated
+    # canonical real/fake label token.
+    EXPLANATION_MAX_NEW_TOKENS = 96
+
     def __init__(
         self,
         lora_dir: str = "",
@@ -111,9 +118,26 @@ class X2DFDClient:
         if not answer_text:
             return None
 
-        text = answer_text.strip()
+        # Normalize accidental generation whitespace.
+        text = " ".join(
+            answer_text.strip().split()
+        )
 
         if len(text.split()) <= 2:
+            return None
+
+        # Do not display a visibly truncated model sentence.
+        #
+        # Example of the previous 32-token failure:
+        #   "...a green and white doll, and a"
+        #
+        # The detector score remains valid and is returned;
+        # only incomplete explanatory prose is suppressed.
+        if text[-1] not in ".!?…":
+            logger.warning(
+                "Suppressing incomplete LLaVA explanation: %r",
+                text,
+            )
             return None
 
         return text
@@ -213,7 +237,7 @@ class X2DFDClient:
                 self.base_model,
 
                 "--max-new-tokens",
-                "32",
+                str(self.EXPLANATION_MAX_NEW_TOKENS),
 
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
@@ -327,7 +351,7 @@ class X2DFDClient:
                 "prompt": prompt,
                 "lora_dir": self.lora_dir,
                 "base_model": self.base_model,
-                "max_new_tokens": 32,
+                "max_new_tokens": self.EXPLANATION_MAX_NEW_TOKENS,
             }
         )
 
