@@ -33,15 +33,21 @@ def _load_infer_function():
         sys.path.insert(0, str(x2root))
 
     from utils.lora_inference import (
+        single_image_infer,
         single_image_infer_with_scores,
     )
 
-    return single_image_infer_with_scores
+    return (
+        single_image_infer_with_scores,
+        single_image_infer,
+    )
 
 
 def _run_one(
-    infer_fn,
+    score_fn,
+    explain_fn,
     *,
+    mode,
     image,
     prompt,
     lora_dir,
@@ -60,31 +66,68 @@ def _run_one(
             f"Input image missing: {image_path}"
         )
 
-    # Keep stdout exclusively for JSON protocol.
-    with contextlib.redirect_stdout(sys.stderr):
+    # stdout stays JSON-only.
+    with contextlib.redirect_stdout(
+        sys.stderr
+    ):
 
-        result = infer_fn(
-            image_path=str(image_path),
-            question=prompt,
-            model_path=lora_dir,
-            model_base=base_model,
-            temperature=0.0,
-            top_p=1.0,
-            num_beams=1,
-            max_new_tokens=max_new_tokens,
+        if mode == "score":
+
+            result = score_fn(
+                image_path=str(image_path),
+                question=prompt,
+                model_path=lora_dir,
+                model_base=base_model,
+                temperature=0.0,
+                top_p=1.0,
+                num_beams=1,
+                max_new_tokens=max_new_tokens,
+            )
+
+            return {
+                "ok": True,
+                "mode": "score",
+                "real_score":
+                    result.get("real_score"),
+                "fake_score":
+                    result.get("fake_score"),
+            }
+
+        if mode == "explain":
+
+            # EXACT ORIGINAL X2DFD EXPLANATION FUNCTION.
+            #
+            # No rewriting.
+            # No sentence completion.
+            # No trimming beyond what the author's
+            # single_image_infer() itself already does.
+            # No extra prompt.
+            # No fallback rationale.
+            answer = explain_fn(
+                image_path=str(image_path),
+                question=prompt,
+                model_path=lora_dir,
+                model_base=base_model,
+                temperature=0.0,
+                top_p=1.0,
+                num_beams=1,
+                max_new_tokens=max_new_tokens,
+            )
+
+            return {
+                "ok": True,
+                "mode": "explain",
+                "answer": answer,
+            }
+
+        raise ValueError(
+            f"Unknown X2DFD mode: {mode}"
         )
-
-    return {
-        "ok": True,
-        "real_score": result.get("real_score"),
-        "fake_score": result.get("fake_score"),
-        "answer": result.get("answer", ""),
-    }
 
 
 def server_mode(args):
 
-    infer_fn = _load_infer_function()
+    score_fn, explain_fn = _load_infer_function()
 
     protocol_out = sys.stdout
 
@@ -105,7 +148,13 @@ def server_mode(args):
             req = json.loads(raw)
 
             response = _run_one(
-                infer_fn,
+                score_fn,
+                explain_fn,
+
+                mode=req.get(
+                    "mode",
+                    "score",
+                ),
 
                 image=req["image"],
                 prompt=req["prompt"],
@@ -191,6 +240,15 @@ def main():
         action="store_true",
     )
 
+    parser.add_argument(
+        "--mode",
+        choices=[
+            "score",
+            "explain",
+        ],
+        default="score",
+    )
+
     parser.add_argument("--image")
     parser.add_argument("--prompt")
 
@@ -207,7 +265,7 @@ def main():
     parser.add_argument(
         "--max-new-tokens",
         type=int,
-        default=96,
+        default=4,
     )
 
     args = parser.parse_args()

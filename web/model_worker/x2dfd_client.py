@@ -17,12 +17,11 @@ class FinalScoreUnavailableError(Exception):
 
 class X2DFDClient:
 
-    # Text-generation budget only.
-    #
-    # This does NOT alter the REAL/FAKE continuous score logic.
-    # The score is still extracted at the actual generated
-    # canonical real/fake label token.
-    EXPLANATION_MAX_NEW_TOKENS = 96
+    # Classification follows the short X2DFD score path.
+    SCORE_MAX_NEW_TOKENS = 4
+
+    # Original X2DFD single_image_infer() default.
+    ORIGINAL_EXPLANATION_MAX_NEW_TOKENS = 512
 
     def __init__(
         self,
@@ -110,37 +109,6 @@ class X2DFDClient:
         return real, fake
 
 
-    @staticmethod
-    def extract_explanation(
-        answer_text: Optional[str],
-    ) -> Optional[str]:
-
-        if not answer_text:
-            return None
-
-        # Normalize accidental generation whitespace.
-        text = " ".join(
-            answer_text.strip().split()
-        )
-
-        if len(text.split()) <= 2:
-            return None
-
-        # Do not display a visibly truncated model sentence.
-        #
-        # Example of the previous 32-token failure:
-        #   "...a green and white doll, and a"
-        #
-        # The detector score remains valid and is returned;
-        # only incomplete explanatory prose is suppressed.
-        if text[-1] not in ".!?…":
-            logger.warning(
-                "Suppressing incomplete LLaVA explanation: %r",
-                text,
-            )
-            return None
-
-        return text
 
 
     async def stop_worker(self):
@@ -237,7 +205,7 @@ class X2DFDClient:
                 self.base_model,
 
                 "--max-new-tokens",
-                str(self.EXPLANATION_MAX_NEW_TOKENS),
+                str(self.SCORE_MAX_NEW_TOKENS),
 
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
@@ -327,6 +295,8 @@ class X2DFDClient:
         image_path: Path,
         selected_alias: str,
         calibrated_score: float,
+        *,
+        include_explanation: bool = True,
     ) -> FinalResult:
 
         image_path = (
@@ -345,19 +315,26 @@ class X2DFDClient:
             calibrated_score,
         )
 
+        # ----------------------------------------------------
+        # A. SCIENTIFIC SCORE
+        # ----------------------------------------------------
+
         response = await self._request(
             {
+                "mode": "score",
                 "image": str(image_path),
                 "prompt": prompt,
                 "lora_dir": self.lora_dir,
                 "base_model": self.base_model,
-                "max_new_tokens": self.EXPLANATION_MAX_NEW_TOKENS,
+                "max_new_tokens":
+                    self.SCORE_MAX_NEW_TOKENS,
             }
         )
 
         if not response.get("ok"):
+
             raise FinalScoreUnavailableError(
-                "X2DFD worker failed: "
+                "X2DFD score worker failed: "
                 f"{response.get('error_type', 'Error')}: "
                 f"{response.get('error', 'unknown')}"
             )
@@ -373,9 +350,73 @@ class X2DFDClient:
             else "REAL"
         )
 
-        explanation = self.extract_explanation(
-            response.get("answer", "")
-        )
+
+        # ----------------------------------------------------
+        # B. ORIGINAL X2DFD EXPLANATION
+        #
+        # Returned exactly as single_image_infer() produces it.
+        # Web layer does not modify the model's text.
+        # ----------------------------------------------------
+
+        explanation = None
+
+        if include_explanation:
+
+            try:
+
+                exp_response = (
+                    await self._request(
+                        {
+                            "mode":
+                                "explain",
+
+                            "image":
+                                str(
+                                    image_path
+                                ),
+
+                            "prompt":
+                                prompt,
+
+                            "lora_dir":
+                                self.lora_dir,
+
+                            "base_model":
+                                self.base_model,
+
+                            "max_new_tokens":
+                                self.ORIGINAL_EXPLANATION_MAX_NEW_TOKENS,
+                        }
+                    )
+                )
+
+                if exp_response.get("ok"):
+
+                    # NO post-processing.
+                    explanation = (
+                        exp_response.get(
+                            "answer"
+                        )
+                    )
+
+                else:
+
+                    logger.warning(
+                        "Original X2DFD explanation failed: %s",
+                        exp_response.get(
+                            "error",
+                            "unknown",
+                        ),
+                    )
+
+            except Exception as exc:
+
+                # Explanation is optional presentation.
+                # Genuine detector score remains valid.
+                logger.warning(
+                    "Original X2DFD explanation unavailable: %s",
+                    exc,
+                )
 
         logger.info(
             "FINAL X2DFD: "

@@ -317,6 +317,7 @@ class LiveModelWorker(BaseModelWorker):
                         row["path"],
                         row["alias"],
                         calibrated,
+                        include_explanation=False,
                     )
                 )
 
@@ -364,7 +365,12 @@ class LiveModelWorker(BaseModelWorker):
         async with GpuLock():
             selected_expert, selected_alias, _, _ = self.router_client.route_image(frame_path)
             raw_score, calibrated_score = await self.expert_client.compute_expert_score(selected_expert, frame_path)
-            final_result = await self.x2dfd_client.infer(frame_path, selected_alias, calibrated_score)
+            final_result = await self.x2dfd_client.infer(
+                frame_path,
+                selected_alias,
+                calibrated_score,
+                include_explanation=False,
+            )
 
         return FrameResult(
             frame_index=frame_idx,
