@@ -6,6 +6,7 @@ import ImageResultCard from './components/ImageResultCard';
 import VideoResultCard from './components/VideoResultCard';
 import ErrorModal from './components/ErrorModal';
 import { checkHealth, checkReadiness, analyzeImage, analyzeVideo, ApiError } from './services/api';
+import { createRequestEpoch } from './requestEpoch';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('image');
@@ -21,6 +22,10 @@ export default function App() {
   const [isReady, setIsReady] = useState(false);
 
   const videoRef = useRef(null);
+  const requestEpochRef = useRef(null);
+  if (requestEpochRef.current === null) {
+    requestEpochRef.current = createRequestEpoch();
+  }
 
   // Initialize health & readiness check
   useEffect(() => {
@@ -49,6 +54,7 @@ export default function App() {
   }, []);
 
   const handleTabChange = (tab) => {
+    requestEpochRef.current.invalidate();
     setActiveTab(tab);
     setSelectedFile(null);
     setImageResult(null);
@@ -57,6 +63,7 @@ export default function App() {
   };
 
   const handleFileSelect = (file) => {
+    requestEpochRef.current.invalidate();
     setSelectedFile(file);
     setImageResult(null);
     setVideoResult(null);
@@ -65,6 +72,8 @@ export default function App() {
 
   const handleAnalyze = async () => {
     if (!selectedFile) return;
+
+    const requestToken = requestEpochRef.current.begin();
 
     // Do not spend phone/laptop resources decoding the local video
     // while the remote GPU is doing inference.
@@ -81,14 +90,21 @@ export default function App() {
     try {
       if (activeTab === 'image') {
         const result = await analyzeImage(selectedFile);
-        setImageResult(result);
+        if (requestEpochRef.current.isCurrent(requestToken)) {
+          setImageResult(result);
+        }
       } else {
         const result = await analyzeVideo(selectedFile, (prog) => {
-          setProgress(prog);
+          if (requestEpochRef.current.isCurrent(requestToken)) {
+            setProgress(prog);
+          }
         });
-        setVideoResult(result);
+        if (requestEpochRef.current.isCurrent(requestToken)) {
+          setVideoResult(result);
+        }
       }
     } catch (err) {
+      if (!requestEpochRef.current.isCurrent(requestToken)) return;
       console.error('Analysis error:', err);
       setError({
         message: err.message || 'Quá trình phân tích thất bại.',
@@ -97,7 +113,9 @@ export default function App() {
         requestId: err.requestId || null,
       });
     } finally {
-      setIsLoading(false);
+      if (requestEpochRef.current.isCurrent(requestToken)) {
+        setIsLoading(false);
+      }
     }
   };
 

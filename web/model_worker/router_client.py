@@ -22,6 +22,7 @@ class RouterClient:
         self.model = None
         self.device = "cpu"
         self._transform = None
+        self.last_route_diagnostics = None
 
     def _init_transform(self):
         from torchvision import transforms  # type: ignore
@@ -89,6 +90,17 @@ class RouterClient:
             top1_conf = float(top2.values[0, 0].item())
             top2_conf = float(top2.values[0, 1].item())
             margin = float(top1_conf - top2_conf)
+
+            self.last_route_diagnostics = {
+                "experts": list(EXPERTS),
+                "logits": logits[0].detach().float().cpu().tolist(),
+                "probabilities": probs[0].detach().float().cpu().tolist(),
+                "selected_index": top1_idx,
+                "selected_expert": EXPERTS[top1_idx],
+                "selected_alias": ALIASES[EXPERTS[top1_idx]],
+                "top1_confidence": top1_conf,
+                "margin": margin,
+            }
 
         selected_expert = EXPERTS[top1_idx]
         selected_alias = ALIASES[selected_expert]

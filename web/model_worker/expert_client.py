@@ -184,6 +184,16 @@ class ExpertClient:
                 if not path or raw in (None, ""):
                     continue
 
+                if path not in expected:
+                    raise ExpertInferenceError(
+                        f"Expert returned unexpected image path: {path}"
+                    )
+
+                if path in found:
+                    raise ExpertInferenceError(
+                        f"Expert returned duplicate image path: {path}"
+                    )
+
                 score = float(raw)
 
                 if not math.isfinite(score):
