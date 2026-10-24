@@ -31,7 +31,7 @@ export default function VideoResultCard({ result, onSeekFrame }) {
           </div>
 
           <div className="score-metric-box">
-            <div className="score-metric-val" style={{ color: '#fbbf24' }}>
+            <div className="score-metric-val text-blocked">
               {fakeFrames.length}/{frames.length}
             </div>
             <div className="score-metric-desc">Frames Giả Mạo Phát Hiện</div>
@@ -60,20 +60,8 @@ export default function VideoResultCard({ result, onSeekFrame }) {
 
       {/* 2. Fail-Closed Explanatory Notice */}
       {isBlocked && (
-        <div style={{
-          padding: '16px 20px',
-          background: 'rgba(245, 158, 11, 0.08)',
-          border: '1px solid rgba(245, 158, 11, 0.25)',
-          borderRadius: 'var(--radius-md)',
-          marginBottom: '24px',
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: '12px',
-          fontSize: '0.88rem',
-          lineHeight: '1.6',
-          color: '#fef3c7',
-        }}>
-          <AlertCircle size={20} style={{ color: '#fbbf24', flexShrink: 0, marginTop: '2px' }} />
+        <div className="blocked-notice">
+          <AlertCircle size={20} className="blocked-notice-icon" />
           <div>
             <strong>Nguyên tắc Trung thực Khoa học (Fail-Closed Invariant):</strong>
             <p style={{ marginTop: '4px' }}>
@@ -88,7 +76,7 @@ export default function VideoResultCard({ result, onSeekFrame }) {
         <div className="metric-card">
           <div className="metric-card-header">
             <span className="metric-card-title">Thông Tin Video</span>
-            <Film size={18} color="#6366f1" />
+            <Film size={18} className="icon-accent" />
           </div>
           <div className="metric-card-val">
             {result.video?.duration_seconds || 0}s
@@ -101,9 +89,9 @@ export default function VideoResultCard({ result, onSeekFrame }) {
         <div className="metric-card">
           <div className="metric-card-header">
             <span className="metric-card-title">Phân Bổ Khung Hình</span>
-            <BarChart3 size={18} color="#ec4899" />
+            <BarChart3 size={18} className="icon-pink" />
           </div>
-          <div className="metric-card-val" style={{ color: fakeFrames.length > 0 ? '#fb7185' : '#34d399' }}>
+          <div className={`metric-card-val ${fakeFrames.length > 0 ? 'text-fake' : 'text-real'}`}>
             {fakeFrames.length} FAKE <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>/ {realFrames.length} REAL</span>
           </div>
           <div className="metric-card-sub">
@@ -114,7 +102,7 @@ export default function VideoResultCard({ result, onSeekFrame }) {
         <div className="metric-card">
           <div className="metric-card-header">
             <span className="metric-card-title">Thời Gian Giám Định</span>
-            <Clock size={18} color="#10b981" />
+            <Clock size={18} className="icon-real" />
           </div>
           <div className="metric-card-val">
             {((result.timing_ms?.total || 0) / 1000).toFixed(1)}s

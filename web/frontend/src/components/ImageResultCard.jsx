@@ -35,7 +35,7 @@ export default function ImageResultCard({ result }) {
         </div>
 
         <div className="score-metric-box">
-          <div className="score-metric-val" style={{ color: isFake ? '#fb7185' : '#34d399' }}>
+          <div className={`score-metric-val ${isFake ? 'text-fake' : 'text-real'}`}>
             {displayProb}%
           </div>
           <div className="score-metric-desc">{displayProbLabel}</div>
@@ -59,9 +59,9 @@ export default function ImageResultCard({ result }) {
         <div className="metric-card">
           <div className="metric-card-header">
             <span className="metric-card-title">1. Định Tuyến Router4</span>
-            <Compass size={18} color="#6366f1" />
+            <Compass size={18} className="icon-accent" />
           </div>
-          <div className="metric-card-val" style={{ color: '#a5b4fc' }}>
+          <div className="metric-card-val text-accent-soft">
             {result.router?.selected_alias || result.router?.selected_expert}
           </div>
           <div className="metric-card-sub">
@@ -73,7 +73,7 @@ export default function ImageResultCard({ result }) {
         <div className="metric-card">
           <div className="metric-card-header">
             <span className="metric-card-title">2. Điểm Chuyên Gia & Hiệu Chuẩn</span>
-            <Cpu size={18} color="#ec4899" />
+            <Cpu size={18} className="icon-pink" />
           </div>
           <div className="metric-card-val">
             {calExpert}%
@@ -87,7 +87,7 @@ export default function ImageResultCard({ result }) {
         <div className="metric-card">
           <div className="metric-card-header">
             <span className="metric-card-title">3. Điểm Pháp Y Cuối (X²-DFD)</span>
-            <CheckCircle2 size={18} color="#10b981" />
+            <CheckCircle2 size={18} className="icon-real" />
           </div>
           <div className="metric-card-val">
             {fakeProb}% <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>/ 100%</span>
@@ -99,7 +99,7 @@ export default function ImageResultCard({ result }) {
       </div>
 
       {/* 4. Processing Timing & Traceability */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 18px', background: 'rgba(255,255,255,0.02)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', fontSize: '0.82rem', color: 'var(--text-muted)', flexWrap: 'wrap', gap: '8px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 18px', background: 'var(--surface-faint)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', fontSize: '0.82rem', color: 'var(--text-muted)', flexWrap: 'wrap', gap: '8px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Clock size={14} />
           <span>Thời gian xử lý: <strong>{result.timing_ms?.total || 0} ms</strong> (Định tuyến: {result.timing_ms?.routing || 0}ms, Chuyên gia: {result.timing_ms?.expert_inference || 0}ms, LLaVA: {result.timing_ms?.x2dfd_inference || 0}ms)</span>

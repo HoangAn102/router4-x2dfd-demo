@@ -7,34 +7,34 @@ export default function ProcessingStatus({ isVideo, progress }) {
   const stage = progress?.stage || (isVideo ? 'queued' : 'analyzing');
 
   let stageLabel = 'Đang phân tích dữ liệu...';
-  let stageIcon = <Scan size={24} color="#6366f1" />;
+  let stageIcon = <Scan size={24} className="icon-accent" />;
 
   if (isVideo) {
     if (stage === 'queued') {
       stageLabel = 'Đã nhận video, chuẩn bị trích xuất...';
-      stageIcon = <Film size={24} color="#a5b4fc" />;
+      stageIcon = <Film size={24} className="icon-accent-soft" />;
     } else if (stage === 'extracting_frames') {
       stageLabel = 'Đang trích xuất 32 frame chuẩn DeepfakeBench...';
-      stageIcon = <Film size={24} color="#6366f1" />;
+      stageIcon = <Film size={24} className="icon-accent" />;
     } else if (stage === 'routing_frames') {
       stageLabel = `Router4 đang định tuyến frame ${current} / ${total}...`;
-      stageIcon = <Layers size={24} color="#6366f1" />;
+      stageIcon = <Layers size={24} className="icon-accent" />;
     } else if (stage === 'scoring_experts') {
       stageLabel = `Đang chạy nhóm expert ${current} / ${total}...`;
-      stageIcon = <Layers size={24} color="#f59e0b" />;
+      stageIcon = <Layers size={24} className="icon-blocked" />;
     } else if (stage === 'loading_x2dfd') {
       stageLabel = 'Đang chuẩn bị X²-DFD + LLaVA trên GPU...';
-      stageIcon = <Loader2 size={24} className="radar-ring" color="#8b5cf6" />;
+      stageIcon = <Loader2 size={24} className="radar-ring icon-violet" />;
     } else if (stage === 'analyzing_frames') {
       stageLabel = `X²-DFD đang giám định frame ${current} / ${total}...`;
-      stageIcon = <Layers size={24} color="#ec4899" />;
+      stageIcon = <Layers size={24} className="icon-pink" />;
     } else if (stage === 'aggregating_results') {
       stageLabel = 'Đang tổng hợp pháp y và kiểm định an toàn...';
-      stageIcon = <Loader2 size={24} className="radar-ring" color="#10b981" />;
+      stageIcon = <Loader2 size={24} className="radar-ring icon-real" />;
     }
   } else {
     stageLabel = 'Đang giám định Router4 & X²-DFD LLaVA...';
-    stageIcon = <Scan size={24} color="#8b5cf6" />;
+    stageIcon = <Scan size={24} className="icon-violet" />;
   }
 
   const percent = total > 0 ? Math.round((current / total) * 100) : 0;

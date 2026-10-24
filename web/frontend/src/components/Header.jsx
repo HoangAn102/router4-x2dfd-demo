@@ -1,5 +1,6 @@
 import React from 'react';
 import { ShieldCheck, AlertTriangle, Cpu, Activity } from 'lucide-react';
+import ThemeToggle from './ThemeToggle';
 
 export default function Header({ runMode, isReady }) {
   const isMock = runMode === 'mock';
@@ -9,7 +10,7 @@ export default function Header({ runMode, isReady }) {
       <div className="header-inner">
         <div className="brand-section">
           <div className="brand-icon-wrapper">
-            <ShieldCheck size={28} color="#ffffff" />
+            <ShieldCheck size={28} />
           </div>
           <div>
             <h1 className="brand-title">Router4 + X²-DFD</h1>
@@ -17,7 +18,7 @@ export default function Header({ runMode, isReady }) {
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div className="header-actions">
           <div className={`status-pill ${isMock ? 'mock' : 'live'}`}>
             <span className="dot" />
             <span>{isMock ? 'Chế độ Mock (Dev)' : 'Máy chủ Live AI'}</span>
@@ -27,6 +28,8 @@ export default function Header({ runMode, isReady }) {
             <Activity size={14} />
             <span>{isReady ? 'Sẵn sàng' : 'Khởi động...'}</span>
           </div>
+
+          <ThemeToggle />
         </div>
       </div>
 

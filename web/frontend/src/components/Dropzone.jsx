@@ -199,7 +199,7 @@ export default function Dropzone({
           </div>
 
           {validationError && (
-            <div style={{ marginTop: '16px', color: '#fb7185', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '0.88rem' }}>
+            <div style={{ marginTop: '16px', color: 'var(--color-fake-text)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '0.88rem' }}>
               <AlertCircle size={16} />
               <span>{validationError}</span>
             </div>

@@ -19,7 +19,7 @@ export default function FrameTimeline({ frames, onSeekFrame }) {
     <div className="timeline-section glass-panel">
       <div className="timeline-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <Film size={22} color="#6366f1" />
+          <Film size={22} className="icon-accent" />
           <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>
             Dòng Thời Gian Giám Định Từng Frame ({frames.length} frames)
           </h3>
@@ -33,7 +33,7 @@ export default function FrameTimeline({ frames, onSeekFrame }) {
       {currentFrame && (
         <div style={{
           padding: '16px 20px',
-          background: 'rgba(255, 255, 255, 0.03)',
+          background: 'var(--surface-subtle)',
           borderRadius: 'var(--radius-md)',
           border: '1px solid var(--border-subtle)',
           marginBottom: '20px',
@@ -48,19 +48,19 @@ export default function FrameTimeline({ frames, onSeekFrame }) {
               <img
                 src={currentFrame.thumbnail_b64.startsWith('data:') ? currentFrame.thumbnail_b64 : `data:image/jpeg;base64,${currentFrame.thumbnail_b64}`}
                 alt={`Frame ${currentFrame.frame_index}`}
-                style={{ width: '64px', height: '64px', objectFit: 'cover', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}
+                style={{ width: '64px', height: '64px', objectFit: 'cover', borderRadius: '8px', border: '1px solid var(--border-media)' }}
               />
             ) : (
-              <div style={{ width: '64px', height: '64px', background: '#000', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Eye size={20} color="var(--text-muted)" />
+              <div style={{ width: '64px', height: '64px', background: 'var(--media-bg)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Eye size={20} className="icon-muted" />
               </div>
             )}
             <div>
               <div style={{ fontSize: '1rem', fontWeight: 700 }}>
-                Frame #{currentFrame.frame_index + 1} tại thời điểm <span style={{ color: '#a5b4fc', fontFamily: 'var(--font-mono)' }}>{currentFrame.timestamp_seconds.toFixed(2)}s</span>
+                Frame #{currentFrame.frame_index + 1} tại thời điểm <span style={{ color: 'var(--text-accent-soft)', fontFamily: 'var(--font-mono)' }}>{currentFrame.timestamp_seconds.toFixed(2)}s</span>
               </div>
               <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-                Chuyên gia Router4: <strong style={{ color: '#e2e8f0' }}>{currentFrame.selected_expert}</strong> • Điểm chuyên gia: <strong>{((currentFrame.expert_score || 0) * 100).toFixed(1)}%</strong>
+                Chuyên gia Router4: <strong style={{ color: 'var(--text-strong)' }}>{currentFrame.selected_expert}</strong> • Điểm chuyên gia: <strong>{((currentFrame.expert_score || 0) * 100).toFixed(1)}%</strong>
               </div>
             </div>
           </div>
@@ -97,7 +97,7 @@ export default function FrameTimeline({ frames, onSeekFrame }) {
                 />
               ) : (
                 <div className="frame-thumb-img" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Eye size={18} color="var(--text-muted)" />
+                  <Eye size={18} className="icon-muted" />
                 </div>
               )}
 
