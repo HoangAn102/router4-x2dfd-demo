@@ -1,0 +1,87 @@
+# QA Accuracy Evaluation Configuration
+
+# Path settings
+paths:
+  # Data directory (relative to repo root)
+  data_dir: "datasets/raw/data"
+  # Results output directory (relative to repo root)
+  results_dir: "eval/outputs"
+
+# File settings
+files:
+  # Path to question file (relative to data_dir)
+  question_file: "question.json"
+  # Real dataset file list (relative to data_dir; auto-detect real*.json if empty)
+  real_files: [Real_small.json]
+  # Fake dataset file list (relative to data_dir; auto-detect fake*.json if empty)
+  fake_files: [Deepfakes_small.json, Face2Face_small.json, FaceSwap_small.json, NeuralTextures_small.json]
+  # fake_files: [Deepfakes.json]
+# Run parameters
+run_params:
+  # Keep top-k questions
+  top_k: 40
+  # Show progress bar (requires tqdm)
+  use_progress_bar: true
+  # Random seed (null to use system RNG)
+  seed: null
+
+# Output configuration
+output:
+  # Save detailed response records
+  save_response_records: true
+  # Save per-question balanced accuracy
+  save_per_question_balanced: true
+  # Save full question ranking
+  save_full_ranking: true
+
+# Annotation generation (image explanations)
+annotations:
+  # Prompt template file
+  prompt_file: "datasets/prompts/prompt.json"
+  # LLaVA model path
+  model_path: "weights/base/llava-v1.5-7b"
+  # Max items per dataset (null means no limit)
+  max_items: null
+  # Override label (real/fake); null to infer from filename
+  label: null
+  # Align with QA lists: derive inputs from files.real_files + files.fake_files (can be disabled)
+  use_qa_file_lists: false
+  # Independent annotation file lists (full datasets)
+  real_files: [Real.json]
+  fake_files: [Deepfakes.json, Face2Face.json, FaceSwap.json, NeuralTextures.json]
+
+# Traditional detector (weak supply)
+weak_supply:
+  # Detector model name (timm)
+  model_name: "swinv2_base_window16_256"
+  # Weights path (relative to repo root)
+  weights_path: "weights/blending_models/best_gf.pth"
+  # Output filename suffix (appended to merged filename)
+  output_suffix: "_scored"
+  # Thresholds used for messaging
+  thresholds:
+    lo: 0.3
+    hi: 0.7
+  # Alias shown in messaging
+  alias: "Blending"
+  # Batched inference settings
+  batch_size: 128
+  num_workers: 8
+  pin_memory: true
+
+# LLaVA/LoRA inference
+model:
+  base: "weights/base/llava-v1.5-7b"
+  # Use the adapter present in this repo to avoid missing-path errors
+  adapter: "weights/checkpoints/ckpt/FR/llava-v1.5-7b-lora-[small]"
+  temperature: 0.0
+  top_p: 1.0
+  num_beams: 1
+  max_new_tokens: 256
+
+# Inference inputs (for pipeline test stage or standalone usage)
+infer:
+  inputs:
+    - "/data/250010183/workspace/X2DFD/datasets/raw/data/test/Real.json"
+    - "/data/250010183/workspace/X2DFD/datasets/raw/data/test/Deepfakes_tiny.json"
+    - "/data/250010183/workspace/X2DFD/datasets/raw/data/test/Faceswap_tiny.json"
