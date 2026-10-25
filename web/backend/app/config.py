@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     MAX_VIDEO_DURATION_SEC: int = 60
     MAX_IMAGE_DIMENSION: int = 4096
 
+    # Face-crop preprocessing (models were trained on DeepfakeBench face crops)
+    FACE_CROP_ENABLED: bool = True
+    FACE_CROP_SCALE: float = 1.3
+    FACE_CROP_SIZE: int = 256
+    FACE_MIN_SIZE: int = 60
+
     # Multi-Tier Timeouts (seconds)
     IMAGE_INFERENCE_TIMEOUT_SEC: int = 60
     FRAME_INFERENCE_TIMEOUT_SEC: int = 45

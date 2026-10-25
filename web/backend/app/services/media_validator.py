@@ -20,9 +20,11 @@ class MediaValidator:
     Image policy:
       - accepted containers: JPEG-family, PNG, WEBP
       - MPO is accepted because it is JPEG-family
-      - MPO is canonicalized to its primary frame as JPEG
+      - MPO is reduced to its primary frame
+      - EXIF orientation is always applied
+      - every image is re-saved as lossless PNG
       - oversized images are downscaled preserving aspect ratio
-      - no crop, no stretching
+      - no crop, no stretching (face crop is a separate step)
       - animated PNG/WEBP is rejected instead of silently picking
         an arbitrary frame
 
@@ -229,94 +231,47 @@ class MediaValidator:
         return width, height
 
 
-    @staticmethod
-    def _pil_output_format(
-        container: str,
-    ) -> str:
-        """
-        IMPORTANT:
-        Output format follows container magic bytes.
-
-        Example:
-          JPEG container + Pillow decoded format MPO
-          -> output JPEG
-
-        This prevents the previous MPO rejection bug.
-        """
-
-        mapping = {
-            "jpeg": "JPEG",
-            "png": "PNG",
-            "webp": "WEBP",
-        }
-
-        try:
-            return mapping[container]
-
-        except KeyError:
-
-            raise MediaValidationError(
-                "INVALID_IMAGE_FORMAT",
-                (
-                    "Unsupported image container: "
-                    f"{container}"
-                ),
-            )
-
-
     @classmethod
     def prepare_image_file(
         cls,
         file_path: Path,
-    ) -> Tuple[int, int]:
+    ) -> Tuple[Path, int, int]:
         """
         Prepare an image for the single-image inference pipeline.
 
-        Normalization occurs only when required:
-          1. the image is MPO, or
-          2. its longest side exceeds MAX_IMAGE_DIMENSION.
+        Every image is normalized:
+          - MPO: primary frame (frame 0) only
+          - EXIF orientation is always applied (exif_transpose)
+          - converted to RGB
+          - longest side capped at MAX_IMAGE_DIMENSION
+            (preserve aspect ratio, no crop, no stretching,
+            deterministic LANCZOS downsampling)
+          - saved as lossless PNG (no JPEG re-compression)
 
-        MPO behavior:
-          - use primary frame (frame 0)
-          - canonicalize to standard JPEG
+        The original upload is replaced by "<stem>.png".
 
-        Oversized-image behavior:
-          - preserve aspect ratio
-          - no crop
-          - no stretching
-          - deterministic LANCZOS downsampling
+        Returns:
+          normalized PNG path,
+          width,
+          height
 
         This is web-demo preprocessing and does not alter model
         thresholds, calibration, WFS, Router4, or final-score logic.
         """
 
         (
-            container,
+            _container,
             decoded_format,
-            width,
-            height,
+            _width,
+            _height,
             _n_frames,
         ) = cls._inspect_image(
             file_path
         )
 
-        needs_resize = (
-            width
-            > settings.MAX_IMAGE_DIMENSION
-            or height
-            > settings.MAX_IMAGE_DIMENSION
+        out_path = file_path.with_suffix(
+            ".png"
         )
-
-        needs_mpo_canonicalization = (
-            decoded_format == "MPO"
-        )
-
-        if (
-            not needs_resize
-            and not needs_mpo_canonicalization
-        ):
-            # Byte-for-byte file remains untouched.
-            return width, height
 
         try:
 
@@ -331,10 +286,15 @@ class MediaValidator:
                 # Detach from the multi-frame source decoder.
                 img = src.copy()
 
-            # Respect orientation when a rewrite is already required.
+            # Phone photos store rotation in EXIF only.
             img = ImageOps.exif_transpose(
                 img
             )
+
+            if img.mode != "RGB":
+                img = img.convert(
+                    "RGB"
+                )
 
             current_w, current_h = (
                 img.size
@@ -384,43 +344,6 @@ class MediaValidator:
                     Image.Resampling.LANCZOS,
                 )
 
-            fmt = cls._pil_output_format(
-                container
-            )
-
-            save_kwargs = {}
-
-            if fmt == "JPEG":
-
-                # MPO and regular JPEG-family images become
-                # a single standard JPEG image.
-                if img.mode not in {
-                    "RGB",
-                    "L",
-                }:
-                    img = img.convert(
-                        "RGB"
-                    )
-
-                save_kwargs.update(
-                    quality=95,
-                    subsampling=0,
-                    optimize=True,
-                )
-
-            elif fmt == "PNG":
-
-                save_kwargs.update(
-                    optimize=True,
-                )
-
-            elif fmt == "WEBP":
-
-                save_kwargs.update(
-                    quality=95,
-                    method=6,
-                )
-
             tmp_path = (
                 file_path.parent
                 / (
@@ -431,14 +354,22 @@ class MediaValidator:
 
             img.save(
                 tmp_path,
-                format=fmt,
-                **save_kwargs,
+                format="PNG",
             )
 
             # Atomic replacement inside the same request workspace.
             tmp_path.replace(
-                file_path
+                out_path
             )
+
+            # Case-insensitive filesystems: "x.PNG" and "x.png"
+            # are the same file, which was just replaced.
+            if (
+                file_path.suffix.lower()
+                != ".png"
+                and file_path.exists()
+            ):
+                file_path.unlink()
 
         except MediaValidationError:
             raise
@@ -454,9 +385,11 @@ class MediaValidator:
             )
 
         # Full post-normalization validation.
-        return cls.validate_image_file(
-            file_path
+        width, height = cls.validate_image_file(
+            out_path
         )
+
+        return out_path, width, height
 
 
     # ========================================================

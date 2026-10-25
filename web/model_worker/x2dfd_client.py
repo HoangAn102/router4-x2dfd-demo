@@ -52,7 +52,8 @@ class X2DFDClient:
         return (
             "<image>\n"
             "Is this image real or fake? "
-            f"And the {selected_alias} score is "
+            # Training prompts use the lowercase alias.
+            f"And the {selected_alias.lower()} score is "
             f"{calibrated_score:.3f}."
         )
 

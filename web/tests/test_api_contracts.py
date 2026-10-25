@@ -2,6 +2,7 @@ import io
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
+from web.backend.app.config import settings
 from web.backend.app.main import app
 
 client = TestClient(app)
@@ -32,7 +33,9 @@ def test_ready_endpoint():
     assert "mock_engine" in data["components"]
 
 
-def test_analyze_image_valid():
+def test_analyze_image_valid(monkeypatch):
+    # Solid-color test image has no face; exercise the mock pipeline without face crop.
+    monkeypatch.setattr(settings, "FACE_CROP_ENABLED", False)
     img_bytes = create_test_image()
     response = client.post(
         "/api/v1/analyze/image",
@@ -46,6 +49,7 @@ def test_analyze_image_valid():
     assert 0.0 <= data["final"]["continuous_score"] <= 1.0
     assert data["final"]["verdict"] in ["REAL", "FAKE"]
     assert data["provenance"]["mode"] == "mock_development"
+    assert data["provenance"]["face_crop"] == "disabled"
     # Explanation is either str or None (never fabricated string)
     assert data["final"]["explanation"] is None or isinstance(data["final"]["explanation"], str)
 
@@ -94,7 +98,9 @@ def create_test_video_bytes() -> bytes:
             os.remove(tmp_name)
 
 
-def test_analyze_video_async_job_and_polling():
+def test_analyze_video_async_job_and_polling(monkeypatch):
+    # Black test frames have no face; exercise the mock pipeline without face crop.
+    monkeypatch.setattr(settings, "FACE_CROP_ENABLED", False)
     valid_mp4 = create_test_video_bytes()
     post_res = client.post(
         "/api/v1/analyze/video",

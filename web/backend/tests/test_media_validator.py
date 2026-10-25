@@ -1,4 +1,3 @@
-import hashlib
 import tempfile
 import unittest
 
@@ -39,7 +38,7 @@ class MediaValidatorRegressionTests(
         self.tmp.cleanup()
 
 
-    def test_small_jpeg_is_not_reencoded(self):
+    def test_small_jpeg_is_normalized_to_lossless_png(self):
 
         path = (
             self.root
@@ -56,34 +55,53 @@ class MediaValidatorRegressionTests(
             quality=90,
         )
 
-        before = hashlib.sha256(
-            path.read_bytes()
-        ).hexdigest()
+        with Image.open(
+            path
+        ) as src:
+            before = src.convert(
+                "RGB"
+            ).tobytes()
 
-        size = (
+        out_path, width, height = (
             MediaValidator
             .prepare_image_file(
                 path
             )
         )
 
-        after = hashlib.sha256(
-            path.read_bytes()
-        ).hexdigest()
+        self.assertEqual(
+            out_path,
+            self.root / "normal.png",
+        )
+
+        self.assertFalse(
+            path.exists(),
+            "Original JPEG should be replaced by the PNG",
+        )
 
         self.assertEqual(
-            size,
+            (width, height),
             (320, 240),
         )
 
-        self.assertEqual(
-            before,
-            after,
-            "Normal JPEG should remain byte-identical",
-        )
+        with Image.open(
+            out_path
+        ) as after:
+            self.assertEqual(
+                after.format,
+                "PNG",
+            )
+
+            self.assertEqual(
+                before,
+                after.convert(
+                    "RGB"
+                ).tobytes(),
+                "PNG must be pixel-identical to the decoded JPEG",
+            )
 
 
-    def test_mpo_is_canonicalized_to_jpeg(self):
+    def test_mpo_is_canonicalized_to_png(self):
 
         path = (
             self.root
@@ -124,7 +142,7 @@ class MediaValidatorRegressionTests(
                 2,
             )
 
-        result = (
+        out_path, width, height = (
             MediaValidator
             .prepare_image_file(
                 path
@@ -132,16 +150,25 @@ class MediaValidatorRegressionTests(
         )
 
         self.assertEqual(
-            result,
+            (width, height),
             (320, 240),
         )
 
         with Image.open(
-            path
+            out_path
         ) as after:
             self.assertEqual(
                 after.format,
-                "JPEG",
+                "PNG",
+            )
+
+            # Primary frame is red, secondary is blue (JPEG-lossy).
+            r, _g, b = after.getpixel((0, 0))
+
+            self.assertGreater(
+                r,
+                b,
+                "Primary MPO frame must be used",
             )
 
             self.assertEqual(
@@ -187,7 +214,7 @@ class MediaValidatorRegressionTests(
             ],
         )
 
-        result = (
+        out_path, width, height = (
             MediaValidator
             .prepare_image_file(
                 path
@@ -195,16 +222,16 @@ class MediaValidatorRegressionTests(
         )
 
         self.assertEqual(
-            result,
+            (width, height),
             (192, 256),
         )
 
         with Image.open(
-            path
+            out_path
         ) as img:
             self.assertEqual(
                 img.format,
-                "JPEG",
+                "PNG",
             )
 
             self.assertEqual(
@@ -231,7 +258,7 @@ class MediaValidatorRegressionTests(
             format="JPEG",
         )
 
-        result = (
+        _out_path, width, height = (
             MediaValidator
             .prepare_image_file(
                 path
@@ -239,7 +266,7 @@ class MediaValidatorRegressionTests(
         )
 
         self.assertEqual(
-            result,
+            (width, height),
             (192, 256),
         )
 

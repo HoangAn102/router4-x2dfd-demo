@@ -18,6 +18,11 @@ from ..services.media_validator import MediaValidationError, MediaValidator
 from ..utils.logger import logger
 from web.model_worker.worker_factory import get_model_worker
 
+from ..services.face_cropper import (
+    NO_FACE_DETECTED_CODE,
+    NO_FACE_DETECTED_MESSAGE,
+    FaceCropper,
+)
 from ..services.video_extractor import VideoExtractor
 from ..services.video_aggregator import VideoAggregator
 import shutil
@@ -36,9 +41,26 @@ async def _run_video_background_task(job_id: str, video_path: Path):
         job_manager.update_progress(job_id, stage="extracting_frames", current_frame=0, total_frames=0)
         duration, frame_count, fps = MediaValidator.validate_video_file(video_path)
 
-        extracted_data = VideoExtractor.extract_uniform_frames(video_path, frames_dir, target_num_frames=32)
+        extracted_data = VideoExtractor.extract_uniform_frames(
+            video_path,
+            frames_dir,
+            target_num_frames=32,
+            crop_faces=settings.FACE_CROP_ENABLED,
+        )
         total_frames = len(extracted_data)
         frames = []
+
+        if not extracted_data and settings.FACE_CROP_ENABLED:
+            logger.warning(f"Video job {job_id}: no face detected in any sampled frame.")
+            job_manager.fail_job(
+                job_id,
+                ErrorDetail(
+                    code=NO_FACE_DETECTED_CODE,
+                    stage="face_detection",
+                    message=NO_FACE_DETECTED_MESSAGE,
+                )
+            )
+            return
 
         # Stage 2:
         # LIVE worker uses batch-compute optimization while preserving
@@ -65,7 +87,7 @@ async def _run_video_background_task(job_id: str, video_path: Path):
         else:
 
             # Compatibility path used by mock/tests only.
-            for item in extracted_data:
+            for pos, item in enumerate(extracted_data):
 
                 idx = item["frame_index"]
                 timestamp = item["timestamp_seconds"]
@@ -75,7 +97,7 @@ async def _run_video_background_task(job_id: str, video_path: Path):
                 job_manager.update_progress(
                     job_id,
                     stage="analyzing_frames",
-                    current_frame=idx + 1,
+                    current_frame=pos + 1,
                     total_frames=total_frames,
                 )
 
@@ -116,7 +138,10 @@ async def _run_video_background_task(job_id: str, video_path: Path):
                 final=final_result,
                 frames=frames,
                 timing_ms={"total": round(elapsed_ms, 2)},
-                provenance={"mode": settings.RUN_MODE},
+                provenance={
+                    "mode": settings.RUN_MODE,
+                    "face_crop": FaceCropper.provenance_tag(),
+                },
             )
             job_manager.complete_job(job_id, full_response)
         else:
@@ -131,7 +156,10 @@ async def _run_video_background_task(job_id: str, video_path: Path):
                 message=error_msg or "Video aggregation protocol is unverified from source.",
                 frames=frames,
                 timing_ms={"total": round(elapsed_ms, 2)},
-                provenance={"mode": settings.RUN_MODE},
+                provenance={
+                    "mode": settings.RUN_MODE,
+                    "face_crop": FaceCropper.provenance_tag(),
+                },
             )
             job_manager.block_job(job_id, blocked_response)
 

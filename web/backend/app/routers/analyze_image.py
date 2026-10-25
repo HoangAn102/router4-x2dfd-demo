@@ -2,8 +2,10 @@ import uuid
 from pathlib import Path
 from fastapi import APIRouter, File, HTTPException, UploadFile, status
 from fastapi.responses import JSONResponse
+from ..config import settings
 from ..schemas.common import ErrorDetail, ErrorResponse
 from ..schemas.image import ImageAnalyzeResponse
+from ..services.face_cropper import NO_FACE_DETECTED_CODE, FaceCropper
 from ..services.file_manager import isolated_temp_workspace
 from ..services.media_validator import MediaValidationError, MediaValidator
 from ..utils.logger import logger
@@ -56,7 +58,7 @@ async def analyze_image_endpoint(file: UploadFile = File(...)):
 
         # Validation stage
         try:
-            final_width, final_height = MediaValidator.prepare_image_file(
+            file_path, final_width, final_height = MediaValidator.prepare_image_file(
                 file_path
             )
 
@@ -66,6 +68,14 @@ async def analyze_image_endpoint(file: UploadFile = File(...)):
                 final_width,
                 final_height,
             )
+
+            inference_path = file_path
+
+            if settings.FACE_CROP_ENABLED:
+                inference_path = FaceCropper.crop_face_file(
+                    file_path,
+                    file_path.with_name(file_path.stem + ".face.png"),
+                )
         except MediaValidationError as mve:
             logger.warning(f"Media validation failed for {request_id}: {mve.code} - {mve.message}")
             return JSONResponse(
@@ -74,8 +84,26 @@ async def analyze_image_endpoint(file: UploadFile = File(...)):
                     request_id=request_id,
                     error=ErrorDetail(
                         code=mve.code,
-                        stage="media_validation",
+                        stage=(
+                            "face_detection"
+                            if mve.code == NO_FACE_DETECTED_CODE
+                            else "media_validation"
+                        ),
                         message=mve.message,
+                    )
+                ).model_dump()
+            )
+        except Exception as e:
+            logger.error(f"Face crop failed for {request_id}: {e}", exc_info=True)
+            return JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content=ErrorResponse(
+                    request_id=request_id,
+                    error=ErrorDetail(
+                        code="FACE_CROP_FAILED",
+                        stage="face_detection",
+                        message="Face detection/cropping failed.",
+                        details=str(e),
                     )
                 ).model_dump()
             )
@@ -83,7 +111,8 @@ async def analyze_image_endpoint(file: UploadFile = File(...)):
         # Model Inference stage
         try:
             worker = get_model_worker()
-            result = await worker.analyze_image(file_path, request_id)
+            result = await worker.analyze_image(inference_path, request_id)
+            result.provenance["face_crop"] = FaceCropper.provenance_tag()
             return result
         except Exception as e:
             logger.error(f"Inference pipeline failed for {request_id}: {e}", exc_info=True)
