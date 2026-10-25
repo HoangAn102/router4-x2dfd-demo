@@ -1,5 +1,6 @@
 import io
 from pathlib import Path
+import pytest
 from PIL import Image
 from web.backend.app.schemas.video import FrameResult
 from web.backend.app.services.video_aggregator import VideoAggregator
@@ -25,6 +26,48 @@ def test_video_extractor_simulated_frames(tmp_path):
     assert "timestamp_seconds" in frames[0]
     assert Path(frames[0]["frame_path"]).exists()
     assert frames[0]["thumbnail_b64"] is not None
+
+
+FACE_IMAGE = (
+    Path(__file__).resolve().parents[2]
+    / "source_snapshot"
+    / "projects"
+    / "Global_Texture_Enhancement_for_Fake_Face_Detection_in_the-Wild"
+    / "face.PNG"
+)
+
+
+def test_video_extractor_face_crop_keeps_original_frame_index(tmp_path, monkeypatch):
+    """Frames without a face are skipped; kept frames keep their sampled index."""
+    import cv2
+    import numpy as np
+    from web.backend.app.config import settings
+
+    if not FACE_IMAGE.exists():
+        pytest.skip(f"Sample face image missing: {FACE_IMAGE}")
+
+    monkeypatch.setattr(settings, "FACE_CROP_SIZE", 256)
+
+    with Image.open(FACE_IMAGE) as img:
+        face_rgb = np.asarray(img.convert("RGB").resize((640, 412)))
+    face_bgr = cv2.cvtColor(face_rgb, cv2.COLOR_RGB2BGR)
+
+    video = tmp_path / "face_alternating.mp4"
+    out = cv2.VideoWriter(str(video), cv2.VideoWriter_fourcc(*"mp4v"), 10.0, (640, 412))
+    for i in range(8):
+        out.write(face_bgr if i % 2 == 0 else np.zeros_like(face_bgr))
+    out.release()
+
+    frames = VideoExtractor.extract_uniform_frames(
+        video, tmp_path / "frames_out", target_num_frames=8, crop_faces=True
+    )
+
+    assert [f["frame_index"] for f in frames] == [0, 2, 4, 6]
+    for f in frames:
+        with Image.open(f["frame_path"]) as crop:
+            assert crop.format == "PNG"
+            assert crop.size == (256, 256)
+        assert f["thumbnail_b64"] is not None
 
 
 def test_video_aggregator_unverified_returns_none_and_blocked():

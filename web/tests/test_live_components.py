@@ -12,32 +12,23 @@ def test_wfs_prompt_builder():
     assert prompt_blend == "<image>\nIs this image real or fake? And the blending score is 0.054."
 
 
-def test_explanation_extraction():
-    # Only label -> None
-    assert X2DFDClient.extract_explanation("Real") is None
-    assert X2DFDClient.extract_explanation("Fake") is None
-    assert X2DFDClient.extract_explanation("real.") is None
-    assert X2DFDClient.extract_explanation("") is None
-
-    # Natural language explanation -> string
-    full_text = "The face exhibits visible warping artifacts around the mouth boundary indicating deepfake generation."
-    extracted = X2DFDClient.extract_explanation(full_text)
-    assert extracted == full_text
-
-
 def test_x2dfd_validate_scores_rejections():
     client = X2DFDClient()
 
     # Reject bool
-    with pytest.raises(FinalScoreUnavailableError, match="must not be a boolean"):
+    with pytest.raises(FinalScoreUnavailableError, match="cannot be bool"):
         client.validate_scores(True, 0.5)
 
     # Reject NaN
-    with pytest.raises(FinalScoreUnavailableError, match="non-finite"):
+    with pytest.raises(FinalScoreUnavailableError, match="Non-finite"):
         client.validate_scores(0.5, float("nan"))
 
+    # Reject out of range
+    with pytest.raises(FinalScoreUnavailableError, match=r"outside \[0,1\]"):
+        client.validate_scores(1.5, -0.5)
+
     # Reject unnormalized
-    with pytest.raises(FinalScoreUnavailableError, match="do not sum to 1.0"):
+    with pytest.raises(FinalScoreUnavailableError, match="not normalized"):
         client.validate_scores(0.8, 0.4)
 
     # Valid

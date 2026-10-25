@@ -45,7 +45,7 @@ class VideoExtractor:
         are skipped; the thumbnail always shows the original frame.
 
         Returns: List of dicts with frame_index, timestamp_seconds, frame_path, thumbnail_b64.
-        frame_index is contiguous over the returned frames.
+        frame_index is the original sampled-frame index (0..N-1); skipped frames leave gaps.
         """
         output_dir.mkdir(parents=True, exist_ok=True)
         results = []
@@ -106,7 +106,7 @@ class VideoExtractor:
                             thumb_b64 = None
 
                         results.append({
-                            "frame_index": len(results),
+                            "frame_index": sample_ptr,
                             "timestamp_seconds": timestamp,
                             "frame_path": frame_path,
                             "thumbnail_b64": thumb_b64,

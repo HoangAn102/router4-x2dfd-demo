@@ -2,8 +2,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import torch
+import pytest
 from PIL import Image
+
+torch = pytest.importorskip("torch")
 
 from web.model_worker.router_client import RouterClient
 

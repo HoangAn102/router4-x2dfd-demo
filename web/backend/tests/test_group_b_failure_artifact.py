@@ -3,7 +3,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from safevision_deep_audit_20261003.run_group_b_diagnostic import write_failure
+import pytest
+
+write_failure = pytest.importorskip(
+    "safevision_deep_audit_20261003.run_group_b_diagnostic"
+).write_failure
 
 
 class GroupBFailureArtifactTests(unittest.TestCase):
