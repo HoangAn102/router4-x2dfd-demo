@@ -153,3 +153,97 @@ def test_api_video_without_face_fails_job():
 
     assert poll["status"] == "failed"
     assert poll["error"]["code"] == "NO_FACE_DETECTED"
+
+
+# ---- detector fallback: haar -> yunet -> dlib -> NO_FACE ----
+
+def _boom(*_a, **_k):
+    raise AssertionError("fallback must not run when strict Haar found a face")
+
+
+def _scene(tmp_path, size=(400, 300)):
+    src = tmp_path / "scene.png"
+    Image.new("RGB", size, (90, 120, 150)).save(src, format="PNG")
+    return src
+
+
+def test_strict_haar_hit_never_calls_fallbacks(monkeypatch):
+    # Box >= 10% of the short side: no sanity re-check either.
+    monkeypatch.setattr(FaceCropper, "detect_largest_face", classmethod(lambda cls, img: (10, 10, 80, 80)))
+    monkeypatch.setattr(FaceCropper, "_detect_yunet", classmethod(_boom))
+    monkeypatch.setattr(FaceCropper, "_detect_dlib", staticmethod(_boom))
+    assert FaceCropper.detect_face_with_fallback(Image.new("RGB", (200, 200))) == ((10, 10, 80, 80), "haar")
+
+
+def test_real_face_sample_still_uses_strict_haar():
+    if not FACE_IMAGE.exists():
+        pytest.skip(f"Sample face image missing: {FACE_IMAGE}")
+    with Image.open(FACE_IMAGE) as img:
+        assert FaceCropper.detect_face_with_fallback(img)[1] == "haar"
+
+
+def test_yunet_used_when_haar_misses(monkeypatch, tmp_path):
+    monkeypatch.setattr(FaceCropper, "detect_largest_face", classmethod(lambda cls, img: None))
+    monkeypatch.setattr(FaceCropper, "_detect_yunet", classmethod(lambda cls, img: (100, 50, 120, 120)))
+    monkeypatch.setattr(FaceCropper, "_detect_dlib", staticmethod(_boom))
+    out, detector = FaceCropper.crop_face_file_with_detector(_scene(tmp_path), tmp_path / "s.face.png")
+    assert detector == "yunet"
+    assert Image.open(out).size == (256, 256)
+    assert FaceCropper.provenance_tag(detector) == "yunet_1.3x_256"
+
+
+def test_dlib_used_when_haar_and_yunet_miss(monkeypatch):
+    monkeypatch.setattr(FaceCropper, "detect_largest_face", classmethod(lambda cls, img: None))
+    monkeypatch.setattr(FaceCropper, "_detect_yunet", classmethod(lambda cls, img: None))
+    monkeypatch.setattr(FaceCropper, "_detect_dlib", staticmethod(lambda img: (5, 5, 90, 90)))
+    assert FaceCropper.detect_face_with_fallback(Image.new("RGB", (200, 200))) == ((5, 5, 90, 90), "dlib")
+
+
+def test_all_detectors_miss_raises_no_face(monkeypatch, tmp_path):
+    monkeypatch.setattr(FaceCropper, "detect_largest_face", classmethod(lambda cls, img: None))
+    monkeypatch.setattr(FaceCropper, "_detect_yunet", classmethod(lambda cls, img: None))
+    monkeypatch.setattr(FaceCropper, "_detect_dlib", staticmethod(lambda img: None))
+    with pytest.raises(MediaValidationError) as exc:
+        FaceCropper.crop_face_file_with_detector(_scene(tmp_path), tmp_path / "s.face.png")
+    assert exc.value.code == NO_FACE_DETECTED_CODE
+
+
+def test_yunet_missing_model_returns_none(monkeypatch):
+    monkeypatch.setattr(settings, "FACE_YUNET_MODEL", "/nonexistent/yunet.onnx")
+    assert FaceCropper._detect_yunet(Image.new("RGB", (200, 200))) is None
+
+
+def test_yunet_finds_nothing_on_flat_image():
+    if not Path(settings.FACE_YUNET_MODEL).is_file():
+        pytest.skip("YuNet model not on this machine")
+    assert FaceCropper._detect_yunet(Image.new("RGB", (640, 480), (90, 120, 150))) is None
+
+
+def test_video_crop_keeps_strict_haar_only(monkeypatch):
+    monkeypatch.setattr(FaceCropper, "detect_largest_face", classmethod(lambda cls, img: None))
+    monkeypatch.setattr(FaceCropper, "_detect_yunet", classmethod(_boom))
+    assert FaceCropper.crop_image(Image.new("RGB", (200, 200))) is None
+
+
+def test_api_provenance_reports_fallback_detector(monkeypatch):
+    monkeypatch.setattr(settings, "RUN_MODE", "mock")
+    monkeypatch.setattr(FaceCropper, "detect_largest_face", classmethod(lambda cls, img: None))
+    monkeypatch.setattr(FaceCropper, "_detect_yunet", classmethod(lambda cls, img: (60, 40, 120, 120)))
+    buf = io.BytesIO()
+    Image.new("RGB", (400, 300), (90, 120, 150)).save(buf, format="PNG")
+    resp = client.post("/api/v1/analyze/image", files={"file": ("selfie.png", buf.getvalue(), "image/png")})
+    assert resp.status_code == 200
+    assert resp.json()["provenance"]["face_crop"] == "yunet_1.3x_256"
+
+
+def test_tiny_haar_box_is_replaced_by_larger_yunet_face(monkeypatch):
+    # 70px Haar box on a 1920x2560 photo (< 10% of short side) -> YuNet's real face wins.
+    monkeypatch.setattr(FaceCropper, "detect_largest_face", classmethod(lambda cls, img: (1332, 687, 70, 70)))
+    monkeypatch.setattr(FaceCropper, "_detect_yunet", classmethod(lambda cls, img: (579, 542, 634, 821)))
+    assert FaceCropper.detect_face_with_fallback(Image.new("RGB", (1920, 2560))) == ((579, 542, 634, 821), "yunet")
+
+
+def test_tiny_haar_box_kept_when_yunet_finds_nothing(monkeypatch):
+    monkeypatch.setattr(FaceCropper, "detect_largest_face", classmethod(lambda cls, img: (1332, 687, 70, 70)))
+    monkeypatch.setattr(FaceCropper, "_detect_yunet", classmethod(lambda cls, img: None))
+    assert FaceCropper.detect_face_with_fallback(Image.new("RGB", (1920, 2560))) == ((1332, 687, 70, 70), "haar")

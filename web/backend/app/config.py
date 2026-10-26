@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     FACE_CROP_SCALE: float = 1.3
     FACE_CROP_SIZE: int = 256
     FACE_MIN_SIZE: int = 60
+    # Fallback when strict Haar finds no face (OpenCV YuNet, MIT, opencv_zoo 2023mar).
+    # 2026-10-26: found the face on 2/3 phone selfies Haar missed, 0/39 hits on face-free images.
+    FACE_YUNET_MODEL: str = "/home/aiotlab/hoangan/models/yunet/face_detection_yunet_2023mar.onnx"
+    FACE_YUNET_SCORE: float = 0.9
+    # Haar boxes smaller than this fraction of the short side are re-checked with YuNet.
+    FACE_HAAR_MIN_FRACTION: float = 0.10
 
     # Reliability flag (presentation only; does NOT change routing, scores or verdict).
     # 0.30 = bottom ~18% router confidence on FFPP val (AUC 0.67 there vs 0.92 overall).

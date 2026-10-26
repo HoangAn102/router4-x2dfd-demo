@@ -70,9 +70,10 @@ async def analyze_image_endpoint(file: UploadFile = File(...)):
             )
 
             inference_path = file_path
+            face_detector = "haar"
 
             if settings.FACE_CROP_ENABLED:
-                inference_path = FaceCropper.crop_face_file(
+                inference_path, face_detector = FaceCropper.crop_face_file_with_detector(
                     file_path,
                     file_path.with_name(file_path.stem + ".face.png"),
                 )
@@ -112,7 +113,7 @@ async def analyze_image_endpoint(file: UploadFile = File(...)):
         try:
             worker = get_model_worker()
             result = await worker.analyze_image(inference_path, request_id)
-            result.provenance["face_crop"] = FaceCropper.provenance_tag()
+            result.provenance["face_crop"] = FaceCropper.provenance_tag(face_detector)
             return result
         except Exception as e:
             logger.error(f"Inference pipeline failed for {request_id}: {e}", exc_info=True)
