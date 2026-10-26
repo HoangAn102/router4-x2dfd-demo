@@ -7,10 +7,20 @@ export default function ImageResultCard({ result }) {
   const isFake = result.final.verdict === 'FAKE';
   const fakeProb = (result.final.fake_probability * 100).toFixed(1);
   const realProb = (result.final.real_probability * 100).toFixed(1);
+  // General AI-image gate: when it overrides, `final` holds the detector score;
+  // the X2DFD card keeps showing the original face-deepfake score.
+  const aiGate = result.ai_detector;
+  const aiOverridden = aiGate?.overridden === true;
+  const aiScore = typeof aiGate?.score === 'number' ? (aiGate.score * 100).toFixed(1) : null;
+  // No face found: only the AI-image gate ran, Router4/expert/X2DFD do not apply.
+  const faceless = !result.router;
+
   const displayProb = isFake ? fakeProb : realProb;
-  const displayProbLabel = isFake
-    ? 'Xác suất Giả mạo (P_fake)'
-    : 'Xác suất Ảnh thật (P_real)';
+  const displayProbLabel = aiOverridden
+    ? 'Điểm ảnh AI (detector tổng quát)'
+    : isFake
+      ? 'Xác suất Giả mạo (P_fake)'
+      : 'Xác suất Ảnh thật (P_real)';
   const routerConf = ((result.router?.router_confidence || 0) * 100).toFixed(1);
   const margin = ((result.router?.margin || 0) * 100).toFixed(1);
   const rawExpert = ((result.expert?.raw_score || 0) * 100).toFixed(1);
@@ -25,10 +35,6 @@ export default function ImageResultCard({ result }) {
   const isLowReliability = reliability?.level === 'low';
   const reliabilityReasons = Array.isArray(reliability?.reasons) ? reliability.reasons : [];
 
-  // General AI-image gate: when it overrides, `final` holds the detector score;
-  // card 3 keeps showing the original X²-DFD score.
-  const aiGate = result.ai_detector;
-  const aiOverridden = aiGate?.overridden === true;
   const x2dfdFakeProb = aiOverridden && typeof aiGate.x2dfd_fake_probability === 'number'
     ? (aiGate.x2dfd_fake_probability * 100).toFixed(1)
     : fakeProb;
@@ -59,11 +65,16 @@ export default function ImageResultCard({ result }) {
       {/* 1a. AI-image gate override */}
       {aiOverridden && (
         <div className="ai-gate-note" role="status">
-          <AlertOctagon size={18} aria-hidden="true" />
-          <span>
-            Phát hiện dấu hiệu ảnh do AI tạo (detector tổng quát): điểm {(aiGate.score * 100).toFixed(1)}%
-            ≥ ngưỡng {(aiGate.threshold * 100).toFixed(1)}%. Kết luận FAKE thay cho X²-DFD ({x2dfdFakeProb}% giả).
-          </span>
+          <AlertOctagon size={22} aria-hidden="true" />
+          <div>
+            <div className="ai-gate-score">Điểm ảnh AI: {aiScore}%</div>
+            <div className="ai-gate-detail">
+              Detector ảnh AI tổng quát vượt ngưỡng {(aiGate.threshold * 100).toFixed(1)}% nên kết luận là FAKE.
+              {faceless
+                ? ' Không tìm thấy khuôn mặt nên mô hình deepfake khuôn mặt (X2DFD) không áp dụng.'
+                : ` Điểm deepfake khuôn mặt (X2DFD) chỉ đo ghép/sửa mặt: ${x2dfdFakeProb}%.`}
+            </div>
+          </div>
         </div>
       )}
 
@@ -91,13 +102,18 @@ export default function ImageResultCard({ result }) {
         <div className="explanation-block">
           <div className="explanation-header">
             <Brain size={20} />
-            <span>Phân Tích Lý Luận Từ Mô Hình Đa Phương Thức (LLaVA Reasoning)</span>
+            <span>
+              {aiOverridden
+                ? 'Kết luận từ detector ảnh AI tổng quát'
+                : 'Phân Tích Lý Luận Từ Mô Hình Đa Phương Thức (LLaVA Reasoning)'}
+            </span>
           </div>
           <p className="explanation-body">{explanation}</p>
         </div>
       )}
 
-      {/* 3. Detailed Multimodal Breakdown */}
+      {/* 3. Detailed Multimodal Breakdown (absent when no face was found) */}
+      {!faceless && (
       <div className="detail-grid">
         {/* Router4 Decision Card */}
         <div className="metric-card">
@@ -130,7 +146,7 @@ export default function ImageResultCard({ result }) {
         {/* Final Continuous Score Card */}
         <div className="metric-card">
           <div className="metric-card-header">
-            <span className="metric-card-title">3. Điểm Pháp Y Cuối (X²-DFD)</span>
+            <span className="metric-card-title">3. Điểm deepfake khuôn mặt (X2DFD)</span>
             <CheckCircle2 size={18} className="icon-real" />
           </div>
           <div className="metric-card-val">
@@ -141,6 +157,7 @@ export default function ImageResultCard({ result }) {
           </div>
         </div>
       </div>
+      )}
 
       {/* 4. Processing Timing & Traceability */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 18px', background: 'var(--surface-faint)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', fontSize: '0.82rem', color: 'var(--text-muted)', flexWrap: 'wrap', gap: '8px' }}>

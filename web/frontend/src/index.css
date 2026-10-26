@@ -452,7 +452,16 @@ body {
   border-radius: var(--radius-md);
   color: var(--color-fake-text);
   font-size: 0.9rem;
-  font-weight: 600;
+  line-height: 1.5;
+}
+
+.ai-gate-score {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.ai-gate-detail {
+  margin-top: 2px;
 }
 
 /* Navigation Tabs */
