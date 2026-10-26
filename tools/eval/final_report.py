@@ -127,7 +127,7 @@ def main():
 
     # Figure 1: accuracy per set for the 4 configurations
     sets = [s for s in SETS if s != "FFHQ clean (real only)"] + ["FFHQ clean (real only)"]
-    fig, ax = plt.subplots(figsize=(9, 4.5))
+    fig, ax = plt.subplots(figsize=(9.5, 5.2))
     w = 0.2
     for i, name in enumerate(CONFIGS):
         vals = [abl[(abl.config == name) & (abl.set == s)].acc.iloc[0] * 100 for s in sets]
@@ -135,11 +135,15 @@ def main():
         for b, v in zip(bars, vals):
             ax.text(b.get_x() + b.get_width() / 2, v + 1, f"{v:.0f}", ha="center", fontsize=7)
     ax.set_xticks(np.arange(len(sets)))
-    ax.set_xticklabels([s.replace(" (", "\n(") for s in sets], fontsize=8)
+    def tick(s):
+        a = abl[(abl.config == CONFIGS[0]) & (abl.set == s)].iloc[0]
+        z = abl[(abl.config == CONFIGS[-1]) & (abl.set == s)].iloc[0]
+        return f"{s.replace(' (', chr(10) + '(')}\nn={a.n_real}+{a.n_fake}; analysed {a.analysed} -> {z.analysed}"
+    ax.set_xticklabels([tick(s) for s in sets], fontsize=7)
     ax.set_ylabel("Accuracy (%) on analysed images")
     ax.set_ylim(0, 112)
-    ax.set_title("Accuracy by set for the four configurations (threshold 0.5)")
-    ax.legend(fontsize=8, ncol=2, loc="lower right")
+    ax.set_title("Accuracy on analysed images by set, four configurations (threshold 0.5)\nbars over very few analysed images (AI/diffusion) are not comparable", fontsize=10)
+    ax.legend(fontsize=8, ncol=4, loc="upper center", bbox_to_anchor=(0.5, -0.2))
     fig.tight_layout()
     fig.savefig(args.run_dir / "fig_accuracy_by_group.png", dpi=150)
 
@@ -156,7 +160,7 @@ def main():
     for i in range(2):
         for j in range(3):
             ax.text(j, i, cm[i, j], ha="center", va="center", color="white" if cm[i, j] > cm.max() / 2 else "black", fontsize=13)
-    ax.set_title("Final system: confusion matrix (all selected images)")
+    ax.set_title("Final system: confusion matrix\n(all selected images)", fontsize=11)
     fig.tight_layout()
     fig.savefig(args.run_dir / "fig_confusion_final.png", dpi=150)
     print("\nsaved ablation.csv, report_tables.md, 2 figures in", args.run_dir)
