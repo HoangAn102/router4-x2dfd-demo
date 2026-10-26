@@ -27,9 +27,10 @@ class Settings(BaseSettings):
     FACE_MIN_SIZE: int = 60
 
     # Reliability flag (presentation only; does NOT change routing, scores or verdict).
-    # 0.38 = router-confidence threshold the team used in
+    # 0.30 = bottom ~18% router confidence on FFPP val (AUC 0.67 there vs 0.92 overall).
+    # Previously 0.38, the threshold the team used in
     # source_snapshot/final_clean_integration/03_wfs/patched_route_test_locked038.py
-    ROUTER_LOW_CONFIDENCE: float = 0.38
+    ROUTER_LOW_CONFIDENCE: float = 0.30
     EXPERT_NEUTRAL_BAND: float = 0.10
 
     # Multi-Tier Timeouts (seconds)
