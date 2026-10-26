@@ -10,12 +10,10 @@ from web.backend.app.schemas.image import (
     RouterResult,
 )
 from web.backend.app.schemas.video import FrameResult, VideoFinalResult
-from web.backend.app.services.decision import decide
 from web.backend.app.services.reliability import assess_reliability
 from web.backend.app.services.video_aggregator import VideoAggregator
 from web.backend.app.utils.gpu_lock import GpuLock
 from web.backend.app.utils.logger import logger
-from .ai_image_detector import AIImageDetector
 from .base import BaseModelWorker
 from .expert_client import ExpertClient
 from .router_client import RouterClient
@@ -25,13 +23,10 @@ from .x2dfd_client import X2DFDClient
 class LiveModelWorker(BaseModelWorker):
     """Production live model worker coordinating Router4, 4 Experts, Calibrators, and X²-DFD."""
 
-    PROVENANCE_MODE = "live_server"
-
     def __init__(self):
         self.router_client = RouterClient()
         self.expert_client = ExpertClient()
         self.x2dfd_client = X2DFDClient()
-        self.ai_detector = AIImageDetector()
         self.aggregator = VideoAggregator()
 
     def _should_release_x2dfd_for_experts(self) -> bool:
@@ -101,37 +96,11 @@ class LiveModelWorker(BaseModelWorker):
 
         return components
 
-    async def _blending_raw(
-        self, selected_expert: str, selected_raw: float, image_path: Path
-    ) -> Optional[float]:
-        """Blending raw score for the blending gate; None when disabled or unavailable (fail open)."""
-        if not settings.BLENDING_GATE_ENABLED:
-            return None
-        if selected_expert == "blending":
-            return selected_raw
-        try:
-            raw, _ = await self.expert_client.compute_expert_score("blending", image_path)
-            return raw
-        except Exception as exc:
-            logger.warning("Blending gate unavailable, keeping X2DFD verdict: %s", exc)
-            return None
-
-    async def score_full_image(self, full_image_path: Path) -> Optional[float]:
-        async with GpuLock():
-            return self.ai_detector.try_score(full_image_path)
-
-    async def analyze_image(
-        self, image_path: Path, request_id: str, full_image_path: Optional[Path] = None
-    ) -> ImageAnalyzeResponse:
+    async def analyze_image(self, image_path: Path, request_id: str) -> ImageAnalyzeResponse:
         t0 = time.time()
         logger.info(f"Starting live image analysis pipeline for {request_id} ({image_path.name})")
 
         async with GpuLock():
-            # Step 0: general AI-image detector on the full upload (None when disabled/unavailable)
-            t_ai_0 = time.time()
-            ai_prob = self.ai_detector.try_score(full_image_path or image_path)
-            t_ai = (time.time() - t_ai_0) * 1000
-
             # Step 1: Router4 classifies image into 1 of 4 experts
             t_route_0 = time.time()
             selected_expert, selected_alias, router_conf, margin = self.router_client.route_image(image_path)
@@ -147,24 +116,12 @@ class LiveModelWorker(BaseModelWorker):
             raw_score, calibrated_score = await self.expert_client.compute_expert_score(selected_expert, image_path)
             t_exp = (time.time() - t_exp_0) * 1000
 
-            # Step 2b: blending raw on the face crop for the blending gate
-            # (reuses the selected expert's raw score when Router4 already chose blending).
-            t_bl_0 = time.time()
-            blending_raw = await self._blending_raw(selected_expert, raw_score, image_path)
-            t_bl = (time.time() - t_bl_0) * 1000
-
             # Step 3: WFS prompt constructed & X²-DFD LLaVA + LoRA infers continuous score
             t_mllm_0 = time.time()
             final_result = await self.x2dfd_client.infer(image_path, selected_alias, calibrated_score)
             t_mllm = (time.time() - t_mllm_0) * 1000
 
         total_ms = (time.time() - t0) * 1000
-        final_result, reliability, ai_detector, blending_gate = decide(
-            final_result,
-            assess_reliability(router_conf, calibrated_score),
-            ai_prob,
-            blending_raw,
-        )
 
         return ImageAnalyzeResponse(
             request_id=request_id,
@@ -183,12 +140,8 @@ class LiveModelWorker(BaseModelWorker):
                 score_direction="fake_probability",
             ),
             final=final_result,
-            reliability=reliability,
-            ai_detector=ai_detector,
-            blending_gate=blending_gate,
+            reliability=assess_reliability(router_conf, calibrated_score),
             timing_ms={
-                "ai_detector": round(t_ai, 2),
-                "blending_gate": round(t_bl, 2),
                 "routing": round(t_route, 2),
                 "expert_inference": round(t_exp, 2),
                 "x2dfd_inference": round(t_mllm, 2),

@@ -25,12 +25,6 @@ class Settings(BaseSettings):
     FACE_CROP_SCALE: float = 1.3
     FACE_CROP_SIZE: int = 256
     FACE_MIN_SIZE: int = 60
-    # Fallback when strict Haar finds no face (OpenCV YuNet, MIT, opencv_zoo 2023mar).
-    # 2026-10-26: found the face on 2/3 phone selfies Haar missed, 0/39 hits on face-free images.
-    FACE_YUNET_MODEL: str = "/home/aiotlab/hoangan/models/yunet/face_detection_yunet_2023mar.onnx"
-    FACE_YUNET_SCORE: float = 0.9
-    # Haar boxes smaller than this fraction of the short side are re-checked with YuNet.
-    FACE_HAAR_MIN_FRACTION: float = 0.10
 
     # Reliability flag (presentation only; does NOT change routing, scores or verdict).
     # 0.30 = bottom ~18% router confidence on FFPP val (AUC 0.67 there vs 0.92 overall).
@@ -40,24 +34,6 @@ class Settings(BaseSettings):
     # Disabled: calibrated floors (blending 0.45, texture 0.56) sit inside 0.4-0.6,
     # so this flagged 51% of REAL val images (152/300). Keep 0.0 unless re-validated.
     EXPERT_NEUTRAL_BAND: float = 0.0
-
-    # General AI-image gate (runs on the full upload, before face crop).
-    # X2DFD was trained without diffusion data, so AI images pass as REAL.
-    # ai_prob >= THRESHOLD -> verdict forced to FAKE; WARN <= ai_prob < THRESHOLD -> reliability "low" only.
-    # 0.99: FPR 7% (FFHQ webp 17%, CelebDF 0%), TPR 48% on the 2026-10-26 bench
-    # (~/hoangan/eval_runs/20261026/ai_detector). AI_GATE_ENABLED=false restores the old behaviour.
-    AI_GATE_ENABLED: bool = True
-    AI_GATE_THRESHOLD: float = 0.99
-    AI_GATE_WARN: float = 0.95
-    # Local copy of haywoodsloan/ai-image-detector-deploy (SwinV2, apache-2.0); loaded offline.
-    AI_GATE_MODEL: str = "/home/aiotlab/hoangan/models/haywoodsloan-ai-image-detector-deploy"
-    AI_GATE_MIN_FREE_GPU_GB: float = 4.0
-
-    # Blending-expert gate for face-swap deepfakes X2DFD scores as REAL (runs on the face crop).
-    # 2026-10-26, CelebDF 200/200 on web crops: blending raw AUC 0.917 (other experts ~0.5);
-    # 0.7153 = FPR 2.8% on 401 real images (CelebDF real 0.5%, clean FFHQ 5.2%), catches 54.5% of CelebDF fakes.
-    BLENDING_GATE_ENABLED: bool = True
-    BLENDING_GATE_THRESHOLD: float = 0.7153
 
     # Multi-Tier Timeouts (seconds)
     IMAGE_INFERENCE_TIMEOUT_SEC: int = 60

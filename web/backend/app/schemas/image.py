@@ -55,35 +55,13 @@ class Reliability(BaseModel):
     reasons: List[str] = Field(default_factory=list)
 
 
-class AIDetectorResult(BaseModel):
-    """General AI-image detector run on the full upload (see services/ai_gate.py)."""
-    score: float = Field(..., ge=0.0, le=1.0)
-    threshold: float = Field(..., ge=0.0, le=1.0)
-    model: str
-    overridden: bool = False
-    # X2DFD fake probability before the gate replaced it (only set when overridden).
-    x2dfd_fake_probability: Optional[float] = Field(None, ge=0.0, le=1.0)
-
-
-class BlendingGateResult(BaseModel):
-    """Blending expert raw score on the face crop, used as an extra FAKE gate (services/decision.py)."""
-    raw: float = Field(..., ge=0.0, le=1.0)
-    threshold: float = Field(..., ge=0.0, le=1.0)
-    overridden: bool = False
-    # X2DFD fake probability before the gate replaced it (only set when overridden).
-    x2dfd_fake_probability: Optional[float] = Field(None, ge=0.0, le=1.0)
-
-
 class ImageAnalyzeResponse(BaseModel):
     request_id: str
     status: Literal["ok"] = "ok"
     media_type: Literal["image"] = "image"
-    # None only when no face was found and the AI-image gate alone decided (X2DFD not applicable).
-    router: Optional[RouterResult] = None
-    expert: Optional[ExpertResult] = None
+    router: RouterResult
+    expert: ExpertResult
     final: FinalResult
     reliability: Reliability = Field(default_factory=Reliability)
-    ai_detector: Optional[AIDetectorResult] = None
-    blending_gate: Optional[BlendingGateResult] = None
     timing_ms: Dict[str, float]
     provenance: Dict[str, str]

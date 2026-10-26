@@ -70,25 +70,13 @@ async def analyze_image_endpoint(file: UploadFile = File(...)):
             )
 
             inference_path = file_path
-            face_detector = "haar"
 
             if settings.FACE_CROP_ENABLED:
-                inference_path, face_detector = FaceCropper.crop_face_file_with_detector(
+                inference_path = FaceCropper.crop_face_file(
                     file_path,
                     file_path.with_name(file_path.stem + ".face.png"),
                 )
         except MediaValidationError as mve:
-            if mve.code == NO_FACE_DETECTED_CODE:
-                # No face for X2DFD, but the general AI-image gate can still judge the full image.
-                try:
-                    gated = await get_model_worker().analyze_faceless_image(file_path, request_id)
-                except Exception as e:
-                    logger.warning(f"AI gate on faceless image failed for {request_id}: {e}")
-                    gated = None
-                if gated is not None:
-                    logger.info(f"No face in {request_id}, AI-image gate returned FAKE")
-                    gated.provenance["face_crop"] = "no_face"
-                    return gated
             logger.warning(f"Media validation failed for {request_id}: {mve.code} - {mve.message}")
             return JSONResponse(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -123,8 +111,8 @@ async def analyze_image_endpoint(file: UploadFile = File(...)):
         # Model Inference stage
         try:
             worker = get_model_worker()
-            result = await worker.analyze_image(inference_path, request_id, full_image_path=file_path)
-            result.provenance["face_crop"] = FaceCropper.provenance_tag(face_detector)
+            result = await worker.analyze_image(inference_path, request_id)
+            result.provenance["face_crop"] = FaceCropper.provenance_tag()
             return result
         except Exception as e:
             logger.error(f"Inference pipeline failed for {request_id}: {e}", exc_info=True)
