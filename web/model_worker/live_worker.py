@@ -10,7 +10,7 @@ from web.backend.app.schemas.image import (
     RouterResult,
 )
 from web.backend.app.schemas.video import FrameResult, VideoFinalResult
-from web.backend.app.services.ai_gate import apply_ai_gate
+from web.backend.app.services.decision import decide
 from web.backend.app.services.reliability import assess_reliability
 from web.backend.app.services.video_aggregator import VideoAggregator
 from web.backend.app.utils.gpu_lock import GpuLock
@@ -101,6 +101,21 @@ class LiveModelWorker(BaseModelWorker):
 
         return components
 
+    async def _blending_raw(
+        self, selected_expert: str, selected_raw: float, image_path: Path
+    ) -> Optional[float]:
+        """Blending raw score for the blending gate; None when disabled or unavailable (fail open)."""
+        if not settings.BLENDING_GATE_ENABLED:
+            return None
+        if selected_expert == "blending":
+            return selected_raw
+        try:
+            raw, _ = await self.expert_client.compute_expert_score("blending", image_path)
+            return raw
+        except Exception as exc:
+            logger.warning("Blending gate unavailable, keeping X2DFD verdict: %s", exc)
+            return None
+
     async def score_full_image(self, full_image_path: Path) -> Optional[float]:
         async with GpuLock():
             return self.ai_detector.try_score(full_image_path)
@@ -132,16 +147,23 @@ class LiveModelWorker(BaseModelWorker):
             raw_score, calibrated_score = await self.expert_client.compute_expert_score(selected_expert, image_path)
             t_exp = (time.time() - t_exp_0) * 1000
 
+            # Step 2b: blending raw on the face crop for the blending gate
+            # (reuses the selected expert's raw score when Router4 already chose blending).
+            t_bl_0 = time.time()
+            blending_raw = await self._blending_raw(selected_expert, raw_score, image_path)
+            t_bl = (time.time() - t_bl_0) * 1000
+
             # Step 3: WFS prompt constructed & X²-DFD LLaVA + LoRA infers continuous score
             t_mllm_0 = time.time()
             final_result = await self.x2dfd_client.infer(image_path, selected_alias, calibrated_score)
             t_mllm = (time.time() - t_mllm_0) * 1000
 
         total_ms = (time.time() - t0) * 1000
-        final_result, reliability, ai_detector = apply_ai_gate(
+        final_result, reliability, ai_detector, blending_gate = decide(
             final_result,
             assess_reliability(router_conf, calibrated_score),
             ai_prob,
+            blending_raw,
         )
 
         return ImageAnalyzeResponse(
@@ -163,8 +185,10 @@ class LiveModelWorker(BaseModelWorker):
             final=final_result,
             reliability=reliability,
             ai_detector=ai_detector,
+            blending_gate=blending_gate,
             timing_ms={
                 "ai_detector": round(t_ai, 2),
+                "blending_gate": round(t_bl, 2),
                 "routing": round(t_route, 2),
                 "expert_inference": round(t_exp, 2),
                 "x2dfd_inference": round(t_mllm, 2),

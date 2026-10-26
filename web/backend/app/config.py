@@ -53,6 +53,12 @@ class Settings(BaseSettings):
     AI_GATE_MODEL: str = "/home/aiotlab/hoangan/models/haywoodsloan-ai-image-detector-deploy"
     AI_GATE_MIN_FREE_GPU_GB: float = 4.0
 
+    # Blending-expert gate for face-swap deepfakes X2DFD scores as REAL (runs on the face crop).
+    # 2026-10-26, CelebDF 200/200 on web crops: blending raw AUC 0.917 (other experts ~0.5);
+    # 0.7153 = FPR 2.8% on 401 real images (CelebDF real 0.5%, clean FFHQ 5.2%), catches 54.5% of CelebDF fakes.
+    BLENDING_GATE_ENABLED: bool = True
+    BLENDING_GATE_THRESHOLD: float = 0.7153
+
     # Multi-Tier Timeouts (seconds)
     IMAGE_INFERENCE_TIMEOUT_SEC: int = 60
     FRAME_INFERENCE_TIMEOUT_SEC: int = 45

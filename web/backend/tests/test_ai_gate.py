@@ -181,3 +181,89 @@ def test_faceless_below_threshold_or_disabled_keeps_no_face_error(monkeypatch, e
     resp = _post_faceless()
     assert resp.status_code == 400
     assert resp.json()["error"]["code"] == "NO_FACE_DETECTED"
+
+
+# ---- blending gate + shared decide() ----
+
+from web.backend.app.schemas.image import BlendingGateResult  # noqa: E402
+from web.backend.app.services.decision import decide  # noqa: E402
+
+
+@pytest.fixture
+def blending_settings(monkeypatch):
+    monkeypatch.setattr(settings, "BLENDING_GATE_ENABLED", True)
+    monkeypatch.setattr(settings, "BLENDING_GATE_THRESHOLD", 0.7153)
+
+
+def test_decide_without_scores_is_identity(blending_settings):
+    final, rel = x2dfd_real(), Reliability()
+    out_final, out_rel, ai, bl = decide(final, rel, None, None)
+    assert out_final == final and out_rel == rel and ai is None and bl is None
+
+
+def test_blending_at_threshold_overrides_real_verdict(blending_settings):
+    final, _, ai, bl = decide(x2dfd_real(0.02), Reliability(), 0.05, 0.7153)
+    assert final.verdict == "FAKE"
+    assert final.fake_probability == pytest.approx(0.7153)
+    assert final.real_probability == pytest.approx(1 - 0.7153)
+    assert final.explanation.startswith("Phát hiện dấu vết ghép/hòa trộn khuôn mặt (expert blending), điểm 0.715")
+    assert bl.overridden is True and bl.x2dfd_fake_probability == pytest.approx(0.02)
+    assert ai.overridden is False
+
+
+def test_blending_below_threshold_keeps_x2dfd(blending_settings):
+    final, _, _, bl = decide(x2dfd_real(), Reliability(), 0.05, 0.7152)
+    assert final == x2dfd_real()
+    assert bl.overridden is False and bl.raw == pytest.approx(0.7152)
+
+
+def test_blending_does_not_replace_an_x2dfd_fake(blending_settings):
+    fake = FinalResult(verdict="FAKE", fake_probability=0.86, real_probability=0.14, continuous_score=0.86, explanation="x2dfd text")
+    final, _, _, bl = decide(fake, Reliability(), 0.05, 0.99)
+    assert final == fake and bl.overridden is False
+
+
+def test_ai_gate_takes_precedence_over_blending(blending_settings):
+    final, _, ai, bl = decide(x2dfd_real(), Reliability(), 0.999, 0.95)
+    assert ai.overridden is True and bl.overridden is False
+    assert final.fake_probability == pytest.approx(0.999)
+    assert final.explanation.startswith("Phát hiện dấu hiệu ảnh do AI tạo")
+
+
+def test_blending_gate_disabled_reports_nothing(monkeypatch, blending_settings):
+    monkeypatch.setattr(settings, "BLENDING_GATE_ENABLED", False)
+    final, _, _, bl = decide(x2dfd_real(), Reliability(), 0.05, 0.99)
+    assert final == x2dfd_real() and bl is None
+
+
+def test_blending_threshold_is_read_from_settings(monkeypatch, blending_settings):
+    monkeypatch.setattr(settings, "BLENDING_GATE_THRESHOLD", 0.9)
+    final, _, _, bl = decide(x2dfd_real(), Reliability(), 0.05, 0.8)
+    assert final.verdict == "REAL" and bl.threshold == pytest.approx(0.9)
+
+
+def test_blending_schema_rejects_out_of_range():
+    with pytest.raises(ValidationError):
+        BlendingGateResult(raw=1.5, threshold=0.7)
+
+
+def test_api_blending_override_and_disabled(monkeypatch, blending_settings):
+    monkeypatch.setattr(MockModelWorker, "_mock_ai_score", lambda self, b: 0.01)
+    monkeypatch.setattr(MockModelWorker, "_mock_blending_raw", lambda self, b: 0.99)
+    # Mock X2DFD verdict depends on the file hash; force it REAL via a tiny wrapper on decide input.
+    import web.model_worker.mock_worker as mw
+    real_decide = mw.decide
+    monkeypatch.setattr(mw, "decide", lambda f, r, a, b: real_decide(f.model_copy(update={"verdict": "REAL", "fake_probability": 0.1, "real_probability": 0.9, "continuous_score": 0.1}), r, a, b))
+    data = _post_png().json()
+    assert data["final"]["verdict"] == "FAKE"
+    assert data["blending_gate"]["overridden"] is True
+    assert data["blending_gate"]["x2dfd_fake_probability"] == pytest.approx(0.1)
+    monkeypatch.setattr(settings, "BLENDING_GATE_ENABLED", False)
+    data = _post_png().json()
+    assert data["blending_gate"] is None and data["final"]["verdict"] == "REAL"
+
+
+def test_api_schema_contains_blending_gate_fields(blending_settings):
+    bl = _post_png().json()["blending_gate"]
+    assert set(bl) == {"raw", "threshold", "overridden", "x2dfd_fake_probability"}
+    assert bl["overridden"] is False

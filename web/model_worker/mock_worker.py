@@ -11,7 +11,7 @@ from web.backend.app.schemas.image import (
 )
 from web.backend.app.schemas.video import FrameResult, VideoFinalResult
 from web.backend.app.config import settings
-from web.backend.app.services.ai_gate import apply_ai_gate
+from web.backend.app.services.decision import decide
 from web.backend.app.services.reliability import assess_reliability
 from .base import BaseModelWorker
 
@@ -48,6 +48,12 @@ class MockModelWorker(BaseModelWorker):
             return None
         return round(self._hash_to_unit_float(b"ai:" + file_bytes) * 0.5, 4)
 
+    def _mock_blending_raw(self, file_bytes: bytes) -> Optional[float]:
+        # Kept below 0.5 so mock results never trip the gate; tests patch this to exercise it.
+        if not settings.BLENDING_GATE_ENABLED:
+            return None
+        return round(self._hash_to_unit_float(b"blend:" + file_bytes) * 0.5, 4)
+
     async def score_full_image(self, full_image_path: Path) -> Optional[float]:
         return self._mock_ai_score(full_image_path.read_bytes())
 
@@ -83,7 +89,7 @@ class MockModelWorker(BaseModelWorker):
 
         full_path = full_image_path or image_path
         full_bytes = full_path.read_bytes() if full_path.exists() else file_bytes
-        final, reliability, ai_detector = apply_ai_gate(
+        final, reliability, ai_detector, blending_gate = decide(
             FinalResult(
                 verdict=verdict,
                 fake_probability=fake_prob,
@@ -94,6 +100,7 @@ class MockModelWorker(BaseModelWorker):
             ),
             assess_reliability(router_conf, calibrated_score),
             self._mock_ai_score(full_bytes),
+            self._mock_blending_raw(full_bytes),
         )
 
         return ImageAnalyzeResponse(
@@ -115,6 +122,7 @@ class MockModelWorker(BaseModelWorker):
             final=final,
             reliability=reliability,
             ai_detector=ai_detector,
+            blending_gate=blending_gate,
             timing_ms={
                 "validation": 5.0,
                 "routing": 15.0,

@@ -12,12 +12,18 @@ export default function ImageResultCard({ result }) {
   const aiGate = result.ai_detector;
   const aiOverridden = aiGate?.overridden === true;
   const aiScore = typeof aiGate?.score === 'number' ? (aiGate.score * 100).toFixed(1) : null;
+  // Blending-expert gate (face-swap traces): same idea, overrides a REAL X2DFD verdict.
+  const blendGate = result.blending_gate;
+  const blendOverridden = blendGate?.overridden === true;
+  const blendScore = typeof blendGate?.raw === 'number' ? (blendGate.raw * 100).toFixed(1) : null;
   // No face found: only the AI-image gate ran, Router4/expert/X2DFD do not apply.
   const faceless = !result.router;
 
   const displayProb = isFake ? fakeProb : realProb;
   const displayProbLabel = aiOverridden
     ? 'Điểm ảnh AI (detector tổng quát)'
+    : blendOverridden
+      ? 'Điểm ghép mặt (expert blending)'
     : isFake
       ? 'Xác suất Giả mạo (P_fake)'
       : 'Xác suất Ảnh thật (P_real)';
@@ -35,10 +41,10 @@ export default function ImageResultCard({ result }) {
   const isLowReliability = reliability?.level === 'low';
   const reliabilityReasons = Array.isArray(reliability?.reasons) ? reliability.reasons : [];
 
-  const x2dfdFakeProb = aiOverridden && typeof aiGate.x2dfd_fake_probability === 'number'
-    ? (aiGate.x2dfd_fake_probability * 100).toFixed(1)
-    : fakeProb;
-  const x2dfdRealProb = aiOverridden ? (100 - Number(x2dfdFakeProb)).toFixed(1) : realProb;
+  // Original X2DFD probability, kept in the response when a gate replaced the final score.
+  const gateX2dfd = aiOverridden ? aiGate.x2dfd_fake_probability : (blendOverridden ? blendGate.x2dfd_fake_probability : null);
+  const x2dfdFakeProb = typeof gateX2dfd === 'number' ? (gateX2dfd * 100).toFixed(1) : fakeProb;
+  const x2dfdRealProb = typeof gateX2dfd === 'number' ? (100 - Number(x2dfdFakeProb)).toFixed(1) : realProb;
 
   return (
     <div className="result-container">
@@ -78,6 +84,20 @@ export default function ImageResultCard({ result }) {
         </div>
       )}
 
+      {/* 1a'. Blending-gate override */}
+      {blendOverridden && (
+        <div className="ai-gate-note" role="status">
+          <AlertOctagon size={22} aria-hidden="true" />
+          <div>
+            <div className="ai-gate-score">Điểm ghép mặt (blending): {blendScore}%</div>
+            <div className="ai-gate-detail">
+              Expert blending vượt ngưỡng {(blendGate.threshold * 100).toFixed(1)}% nên kết luận là FAKE.
+              {` Điểm deepfake khuôn mặt (X2DFD) ban đầu: ${x2dfdFakeProb}%.`}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 1b. Low-reliability warning */}
       {isLowReliability && (
         <div className="reliability-warning" role="alert">
@@ -105,7 +125,9 @@ export default function ImageResultCard({ result }) {
             <span>
               {aiOverridden
                 ? 'Kết luận từ detector ảnh AI tổng quát'
-                : 'Phân Tích Lý Luận Từ Mô Hình Đa Phương Thức (LLaVA Reasoning)'}
+                : blendOverridden
+                  ? 'Kết luận từ expert blending (dấu vết ghép mặt)'
+                  : 'Phân Tích Lý Luận Từ Mô Hình Đa Phương Thức (LLaVA Reasoning)'}
             </span>
           </div>
           <p className="explanation-body">{explanation}</p>
