@@ -35,6 +35,18 @@ class Settings(BaseSettings):
     # so this flagged 51% of REAL val images (152/300). Keep 0.0 unless re-validated.
     EXPERT_NEUTRAL_BAND: float = 0.0
 
+    # General AI-image gate (runs on the full upload, before face crop).
+    # X2DFD was trained without diffusion data, so AI images pass as REAL.
+    # ai_prob >= THRESHOLD -> verdict forced to FAKE; WARN <= ai_prob < THRESHOLD -> reliability "low" only.
+    # 0.99: FPR 7% (FFHQ webp 17%, CelebDF 0%), TPR 48% on the 2026-10-26 bench
+    # (~/hoangan/eval_runs/20261026/ai_detector). AI_GATE_ENABLED=false restores the old behaviour.
+    AI_GATE_ENABLED: bool = True
+    AI_GATE_THRESHOLD: float = 0.99
+    AI_GATE_WARN: float = 0.95
+    # Local copy of haywoodsloan/ai-image-detector-deploy (SwinV2, apache-2.0); loaded offline.
+    AI_GATE_MODEL: str = "/home/aiotlab/hoangan/models/haywoodsloan-ai-image-detector-deploy"
+    AI_GATE_MIN_FREE_GPU_GB: float = 4.0
+
     # Multi-Tier Timeouts (seconds)
     IMAGE_INFERENCE_TIMEOUT_SEC: int = 60
     FRAME_INFERENCE_TIMEOUT_SEC: int = 45

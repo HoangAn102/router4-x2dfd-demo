@@ -441,6 +441,20 @@ body {
   padding-left: 18px;
 }
 
+.ai-gate-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding: 12px 18px;
+  background: var(--color-fake-bg);
+  border: 1px solid color-mix(in srgb, var(--color-fake) 35%, transparent);
+  border-radius: var(--radius-md);
+  color: var(--color-fake-text);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
 /* Navigation Tabs */
 .tab-nav {
   display: flex;

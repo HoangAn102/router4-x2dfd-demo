@@ -10,6 +10,8 @@ from web.backend.app.schemas.image import (
     RouterResult,
 )
 from web.backend.app.schemas.video import FrameResult, VideoFinalResult
+from web.backend.app.config import settings
+from web.backend.app.services.ai_gate import apply_ai_gate
 from web.backend.app.services.reliability import assess_reliability
 from .base import BaseModelWorker
 
@@ -38,7 +40,15 @@ class MockModelWorker(BaseModelWorker):
         h = int(hashlib.sha256(data).hexdigest()[:8], 16)
         return round((h % 10000) / 10000.0, 4)
 
-    async def analyze_image(self, image_path: Path, request_id: str) -> ImageAnalyzeResponse:
+    def _mock_ai_score(self, file_bytes: bytes) -> Optional[float]:
+        # Kept below 0.5 so mock results never trip the gate; tests patch this to exercise it.
+        if not settings.AI_GATE_ENABLED:
+            return None
+        return round(self._hash_to_unit_float(b"ai:" + file_bytes) * 0.5, 4)
+
+    async def analyze_image(
+        self, image_path: Path, request_id: str, full_image_path: Optional[Path] = None
+    ) -> ImageAnalyzeResponse:
         t0 = time.time()
         file_bytes = image_path.read_bytes() if image_path.exists() else b"mock_dummy"
         val = self._hash_to_unit_float(file_bytes)
@@ -66,6 +76,21 @@ class MockModelWorker(BaseModelWorker):
 
         elapsed_ms = (time.time() - t0) * 1000 + 45.0  # slight simulated latency
 
+        full_path = full_image_path or image_path
+        full_bytes = full_path.read_bytes() if full_path.exists() else file_bytes
+        final, reliability, ai_detector = apply_ai_gate(
+            FinalResult(
+                verdict=verdict,
+                fake_probability=fake_prob,
+                real_probability=real_prob,
+                continuous_score=fake_prob,
+                decision_threshold=0.5,
+                explanation=explanation,
+            ),
+            assess_reliability(router_conf, calibrated_score),
+            self._mock_ai_score(full_bytes),
+        )
+
         return ImageAnalyzeResponse(
             request_id=request_id,
             status="ok",
@@ -82,15 +107,9 @@ class MockModelWorker(BaseModelWorker):
                 calibrated_score=calibrated_score,
                 score_direction="fake_probability",
             ),
-            final=FinalResult(
-                verdict=verdict,
-                fake_probability=fake_prob,
-                real_probability=real_prob,
-                continuous_score=fake_prob,
-                decision_threshold=0.5,
-                explanation=explanation,
-            ),
-            reliability=assess_reliability(router_conf, calibrated_score),
+            final=final,
+            reliability=reliability,
+            ai_detector=ai_detector,
             timing_ms={
                 "validation": 5.0,
                 "routing": 15.0,

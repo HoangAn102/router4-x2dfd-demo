@@ -111,7 +111,7 @@ async def analyze_image_endpoint(file: UploadFile = File(...)):
         # Model Inference stage
         try:
             worker = get_model_worker()
-            result = await worker.analyze_image(inference_path, request_id)
+            result = await worker.analyze_image(inference_path, request_id, full_image_path=file_path)
             result.provenance["face_crop"] = FaceCropper.provenance_tag()
             return result
         except Exception as e:

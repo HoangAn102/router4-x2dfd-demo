@@ -15,8 +15,14 @@ class BaseModelWorker(ABC):
         pass
 
     @abstractmethod
-    async def analyze_image(self, image_path: Path, request_id: str) -> ImageAnalyzeResponse:
-        """Run the end-to-end image inference pipeline."""
+    async def analyze_image(
+        self, image_path: Path, request_id: str, full_image_path: Optional[Path] = None
+    ) -> ImageAnalyzeResponse:
+        """Run the end-to-end image inference pipeline.
+
+        image_path is the face crop fed to Router4/experts/X2DFD; full_image_path is the
+        whole upload (before cropping) used by the general AI-image gate.
+        """
         pass
 
     @abstractmethod

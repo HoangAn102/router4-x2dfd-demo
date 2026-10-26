@@ -55,6 +55,16 @@ class Reliability(BaseModel):
     reasons: List[str] = Field(default_factory=list)
 
 
+class AIDetectorResult(BaseModel):
+    """General AI-image detector run on the full upload (see services/ai_gate.py)."""
+    score: float = Field(..., ge=0.0, le=1.0)
+    threshold: float = Field(..., ge=0.0, le=1.0)
+    model: str
+    overridden: bool = False
+    # X2DFD fake probability before the gate replaced it (only set when overridden).
+    x2dfd_fake_probability: Optional[float] = Field(None, ge=0.0, le=1.0)
+
+
 class ImageAnalyzeResponse(BaseModel):
     request_id: str
     status: Literal["ok"] = "ok"
@@ -63,5 +73,6 @@ class ImageAnalyzeResponse(BaseModel):
     expert: ExpertResult
     final: FinalResult
     reliability: Reliability = Field(default_factory=Reliability)
+    ai_detector: Optional[AIDetectorResult] = None
     timing_ms: Dict[str, float]
     provenance: Dict[str, str]

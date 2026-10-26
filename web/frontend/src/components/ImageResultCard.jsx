@@ -25,6 +25,15 @@ export default function ImageResultCard({ result }) {
   const isLowReliability = reliability?.level === 'low';
   const reliabilityReasons = Array.isArray(reliability?.reasons) ? reliability.reasons : [];
 
+  // General AI-image gate: when it overrides, `final` holds the detector score;
+  // card 3 keeps showing the original X²-DFD score.
+  const aiGate = result.ai_detector;
+  const aiOverridden = aiGate?.overridden === true;
+  const x2dfdFakeProb = aiOverridden && typeof aiGate.x2dfd_fake_probability === 'number'
+    ? (aiGate.x2dfd_fake_probability * 100).toFixed(1)
+    : fakeProb;
+  const x2dfdRealProb = aiOverridden ? (100 - Number(x2dfdFakeProb)).toFixed(1) : realProb;
+
   return (
     <div className="result-container">
       {/* 1. Verdict Banner */}
@@ -46,6 +55,17 @@ export default function ImageResultCard({ result }) {
           <div className="score-metric-desc">{displayProbLabel}</div>
         </div>
       </div>
+
+      {/* 1a. AI-image gate override */}
+      {aiOverridden && (
+        <div className="ai-gate-note" role="status">
+          <AlertOctagon size={18} aria-hidden="true" />
+          <span>
+            Phát hiện dấu hiệu ảnh do AI tạo (detector tổng quát): điểm {(aiGate.score * 100).toFixed(1)}%
+            ≥ ngưỡng {(aiGate.threshold * 100).toFixed(1)}%. Kết luận FAKE thay cho X²-DFD ({x2dfdFakeProb}% giả).
+          </span>
+        </div>
+      )}
 
       {/* 1b. Low-reliability warning */}
       {isLowReliability && (
@@ -114,10 +134,10 @@ export default function ImageResultCard({ result }) {
             <CheckCircle2 size={18} className="icon-real" />
           </div>
           <div className="metric-card-val">
-            {fakeProb}% <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>/ 100%</span>
+            {x2dfdFakeProb}% <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>/ 100%</span>
           </div>
           <div className="metric-card-sub">
-            Xác thực: <strong>{realProb}% Thật</strong> • Ngưỡng: <strong>50.0%</strong>
+            Xác thực: <strong>{x2dfdRealProb}% Thật</strong> • Ngưỡng: <strong>50.0%</strong>
           </div>
         </div>
       </div>

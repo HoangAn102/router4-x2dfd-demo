@@ -10,10 +10,12 @@ from web.backend.app.schemas.image import (
     RouterResult,
 )
 from web.backend.app.schemas.video import FrameResult, VideoFinalResult
+from web.backend.app.services.ai_gate import apply_ai_gate
 from web.backend.app.services.reliability import assess_reliability
 from web.backend.app.services.video_aggregator import VideoAggregator
 from web.backend.app.utils.gpu_lock import GpuLock
 from web.backend.app.utils.logger import logger
+from .ai_image_detector import AIImageDetector
 from .base import BaseModelWorker
 from .expert_client import ExpertClient
 from .router_client import RouterClient
@@ -27,6 +29,7 @@ class LiveModelWorker(BaseModelWorker):
         self.router_client = RouterClient()
         self.expert_client = ExpertClient()
         self.x2dfd_client = X2DFDClient()
+        self.ai_detector = AIImageDetector()
         self.aggregator = VideoAggregator()
 
     def _should_release_x2dfd_for_experts(self) -> bool:
@@ -96,11 +99,18 @@ class LiveModelWorker(BaseModelWorker):
 
         return components
 
-    async def analyze_image(self, image_path: Path, request_id: str) -> ImageAnalyzeResponse:
+    async def analyze_image(
+        self, image_path: Path, request_id: str, full_image_path: Optional[Path] = None
+    ) -> ImageAnalyzeResponse:
         t0 = time.time()
         logger.info(f"Starting live image analysis pipeline for {request_id} ({image_path.name})")
 
         async with GpuLock():
+            # Step 0: general AI-image detector on the full upload (None when disabled/unavailable)
+            t_ai_0 = time.time()
+            ai_prob = self.ai_detector.try_score(full_image_path or image_path)
+            t_ai = (time.time() - t_ai_0) * 1000
+
             # Step 1: Router4 classifies image into 1 of 4 experts
             t_route_0 = time.time()
             selected_expert, selected_alias, router_conf, margin = self.router_client.route_image(image_path)
@@ -122,6 +132,11 @@ class LiveModelWorker(BaseModelWorker):
             t_mllm = (time.time() - t_mllm_0) * 1000
 
         total_ms = (time.time() - t0) * 1000
+        final_result, reliability, ai_detector = apply_ai_gate(
+            final_result,
+            assess_reliability(router_conf, calibrated_score),
+            ai_prob,
+        )
 
         return ImageAnalyzeResponse(
             request_id=request_id,
@@ -140,8 +155,10 @@ class LiveModelWorker(BaseModelWorker):
                 score_direction="fake_probability",
             ),
             final=final_result,
-            reliability=assess_reliability(router_conf, calibrated_score),
+            reliability=reliability,
+            ai_detector=ai_detector,
             timing_ms={
+                "ai_detector": round(t_ai, 2),
                 "routing": round(t_route, 2),
                 "expert_inference": round(t_exp, 2),
                 "x2dfd_inference": round(t_mllm, 2),
