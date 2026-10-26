@@ -410,6 +410,37 @@ body {
   animation: fadeIn var(--transition-smooth);
 }
 
+/* Low-reliability warning (image result) */
+.reliability-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 14px 18px;
+  background: var(--color-blocked-bg);
+  border: 1px solid color-mix(in srgb, var(--color-blocked) 35%, transparent);
+  border-radius: var(--radius-md);
+  color: var(--color-blocked-text);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  animation: fadeIn var(--transition-smooth);
+}
+
+.reliability-warning-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--color-blocked);
+}
+
+.reliability-warning-title {
+  font-weight: 600;
+}
+
+.reliability-warning-list {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
 /* Navigation Tabs */
 .tab-nav {
   display: flex;

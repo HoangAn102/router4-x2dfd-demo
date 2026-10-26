@@ -10,6 +10,7 @@ from web.backend.app.schemas.image import (
     RouterResult,
 )
 from web.backend.app.schemas.video import FrameResult, VideoFinalResult
+from web.backend.app.services.reliability import assess_reliability
 from .base import BaseModelWorker
 
 
@@ -89,6 +90,7 @@ class MockModelWorker(BaseModelWorker):
                 decision_threshold=0.5,
                 explanation=explanation,
             ),
+            reliability=assess_reliability(router_conf, calibrated_score),
             timing_ms={
                 "validation": 5.0,
                 "routing": 15.0,

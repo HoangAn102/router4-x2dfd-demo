@@ -1,5 +1,5 @@
 import math
-from typing import Dict, Literal, Optional
+from typing import Dict, List, Literal, Optional
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -49,6 +49,12 @@ class FinalResult(BaseModel):
         return v
 
 
+class Reliability(BaseModel):
+    """Presentation-only trust flag. Never alters verdict or scores."""
+    level: Literal["normal", "low"] = "normal"
+    reasons: List[str] = Field(default_factory=list)
+
+
 class ImageAnalyzeResponse(BaseModel):
     request_id: str
     status: Literal["ok"] = "ok"
@@ -56,5 +62,6 @@ class ImageAnalyzeResponse(BaseModel):
     router: RouterResult
     expert: ExpertResult
     final: FinalResult
+    reliability: Reliability = Field(default_factory=Reliability)
     timing_ms: Dict[str, float]
     provenance: Dict[str, str]

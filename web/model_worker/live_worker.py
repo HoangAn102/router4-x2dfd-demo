@@ -10,6 +10,7 @@ from web.backend.app.schemas.image import (
     RouterResult,
 )
 from web.backend.app.schemas.video import FrameResult, VideoFinalResult
+from web.backend.app.services.reliability import assess_reliability
 from web.backend.app.services.video_aggregator import VideoAggregator
 from web.backend.app.utils.gpu_lock import GpuLock
 from web.backend.app.utils.logger import logger
@@ -139,6 +140,7 @@ class LiveModelWorker(BaseModelWorker):
                 score_direction="fake_probability",
             ),
             final=final_result,
+            reliability=assess_reliability(router_conf, calibrated_score),
             timing_ms={
                 "routing": round(t_route, 2),
                 "expert_inference": round(t_exp, 2),

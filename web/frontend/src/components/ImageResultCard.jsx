@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldCheck, AlertOctagon, Brain, Cpu, Compass, Clock, CheckCircle2 } from 'lucide-react';
+import { ShieldCheck, AlertOctagon, AlertTriangle, Brain, Cpu, Compass, Clock, CheckCircle2 } from 'lucide-react';
 
 export default function ImageResultCard({ result }) {
   if (!result || !result.final) return null;
@@ -19,6 +19,11 @@ export default function ImageResultCard({ result }) {
   // Strict explanation rule: Render only if explanation exists and is non-empty string
   const explanation = result.final.explanation;
   const hasExplanation = typeof explanation === 'string' && explanation.trim().length > 0;
+
+  // Presentation-only trust flag from the backend (verdict is unchanged)
+  const reliability = result.reliability;
+  const isLowReliability = reliability?.level === 'low';
+  const reliabilityReasons = Array.isArray(reliability?.reasons) ? reliability.reasons : [];
 
   return (
     <div className="result-container">
@@ -41,6 +46,25 @@ export default function ImageResultCard({ result }) {
           <div className="score-metric-desc">{displayProbLabel}</div>
         </div>
       </div>
+
+      {/* 1b. Low-reliability warning */}
+      {isLowReliability && (
+        <div className="reliability-warning" role="alert">
+          <AlertTriangle size={20} className="reliability-warning-icon" aria-hidden="true" />
+          <div>
+            <div className="reliability-warning-title">
+              Độ tin cậy thấp: ảnh có thể nằm ngoài dữ liệu mô hình đã học. Kết quả chỉ mang tính tham khảo.
+            </div>
+            {reliabilityReasons.length > 0 && (
+              <ul className="reliability-warning-list">
+                {reliabilityReasons.map((reason, i) => (
+                  <li key={i}>{reason}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* 2. AI Reasoning & Explanation Block (Strict Gate: Render only if non-null) */}
       {hasExplanation && (

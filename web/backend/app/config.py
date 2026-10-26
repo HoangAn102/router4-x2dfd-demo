@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     FACE_CROP_SIZE: int = 256
     FACE_MIN_SIZE: int = 60
 
+    # Reliability flag (presentation only; does NOT change routing, scores or verdict).
+    # 0.38 = router-confidence threshold the team used in
+    # source_snapshot/final_clean_integration/03_wfs/patched_route_test_locked038.py
+    ROUTER_LOW_CONFIDENCE: float = 0.38
+    EXPERT_NEUTRAL_BAND: float = 0.10
+
     # Multi-Tier Timeouts (seconds)
     IMAGE_INFERENCE_TIMEOUT_SEC: int = 60
     FRAME_INFERENCE_TIMEOUT_SEC: int = 45
