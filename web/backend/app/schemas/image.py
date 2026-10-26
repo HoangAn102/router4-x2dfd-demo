@@ -69,8 +69,9 @@ class ImageAnalyzeResponse(BaseModel):
     request_id: str
     status: Literal["ok"] = "ok"
     media_type: Literal["image"] = "image"
-    router: RouterResult
-    expert: ExpertResult
+    # None only when no face was found and the AI-image gate alone decided (X2DFD not applicable).
+    router: Optional[RouterResult] = None
+    expert: Optional[ExpertResult] = None
     final: FinalResult
     reliability: Reliability = Field(default_factory=Reliability)
     ai_detector: Optional[AIDetectorResult] = None

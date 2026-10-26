@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from web.backend.app.config import settings
 from web.backend.app.main import app
 from web.backend.app.schemas.image import AIDetectorResult, FinalResult, Reliability
-from web.backend.app.services.ai_gate import apply_ai_gate
+from web.backend.app.services.ai_gate import apply_ai_gate, build_faceless_response
 from web.model_worker.ai_image_detector import AIImageDetector
 from web.model_worker.mock_worker import MockModelWorker
 
@@ -130,3 +130,54 @@ def test_api_schema_contains_ai_detector_fields():
     det = data["ai_detector"]
     assert set(det) == {"score", "threshold", "model", "overridden", "x2dfd_fake_probability"}
     assert det["overridden"] is False          # mock score stays below 0.5
+
+
+def test_build_faceless_response_threshold():
+    assert build_faceless_response("r", None, {}, {}) is None
+    assert build_faceless_response("r", 0.9899, {}, {}) is None
+    resp = build_faceless_response("r", 0.99, {"total": 1.0}, {"mode": "m"})
+    assert resp.final.verdict == "FAKE"
+    assert resp.router is None and resp.expert is None
+    assert resp.ai_detector.overridden is True
+    assert "không áp dụng" in resp.final.explanation
+
+
+def _post_faceless():
+    # A flat colour image: Haar finds no face -> NO_FACE_DETECTED path.
+    buf = io.BytesIO()
+    Image.new("RGB", (512, 512), (10, 120, 200)).save(buf, format="PNG")
+    return TestClient(app).post(
+        "/api/v1/analyze/image",
+        files={"file": ("scene.png", buf.getvalue(), "image/png")},
+    )
+
+
+def test_faceless_ai_image_returns_fake_from_gate(monkeypatch):
+    monkeypatch.setattr(settings, "FACE_CROP_ENABLED", True)
+    monkeypatch.setattr(MockModelWorker, "_mock_ai_score", lambda self, b: 0.997)
+    resp = _post_faceless()
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["final"]["verdict"] == "FAKE"
+    assert data["final"]["fake_probability"] == pytest.approx(0.997)
+    assert data["router"] is None
+    assert data["expert"] is None
+    assert data["ai_detector"]["overridden"] is True
+    assert data["ai_detector"]["x2dfd_fake_probability"] is None
+    assert data["provenance"]["face_crop"] == "no_face"
+    assert data["provenance"]["pipeline"] == "ai_gate_only"
+
+
+@pytest.mark.parametrize("enabled, score", [(True, 0.5), (True, 0.9899), (False, 0.999)])
+def test_faceless_below_threshold_or_disabled_keeps_no_face_error(monkeypatch, enabled, score):
+    monkeypatch.setattr(settings, "FACE_CROP_ENABLED", True)
+    monkeypatch.setattr(settings, "AI_GATE_ENABLED", enabled)
+    original = MockModelWorker._mock_ai_score
+    # Disabled gate: the real mock hook returns None regardless of the patched score.
+    monkeypatch.setattr(
+        MockModelWorker, "_mock_ai_score",
+        (lambda self, b: score) if enabled else original,
+    )
+    resp = _post_faceless()
+    assert resp.status_code == 400
+    assert resp.json()["error"]["code"] == "NO_FACE_DETECTED"

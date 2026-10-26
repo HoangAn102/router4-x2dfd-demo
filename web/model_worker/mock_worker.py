@@ -19,6 +19,8 @@ from .base import BaseModelWorker
 class MockModelWorker(BaseModelWorker):
     """Deterministic Mock Worker strictly for local development and unit tests."""
 
+    PROVENANCE_MODE = "mock_development"
+
     EXPERTS = ["blending", "diffusion", "frequency", "texture"]
     ALIASES = {
         "blending": "Blending",
@@ -45,6 +47,9 @@ class MockModelWorker(BaseModelWorker):
         if not settings.AI_GATE_ENABLED:
             return None
         return round(self._hash_to_unit_float(b"ai:" + file_bytes) * 0.5, 4)
+
+    async def score_full_image(self, full_image_path: Path) -> Optional[float]:
+        return self._mock_ai_score(full_image_path.read_bytes())
 
     async def analyze_image(
         self, image_path: Path, request_id: str, full_image_path: Optional[Path] = None

@@ -25,6 +25,8 @@ from .x2dfd_client import X2DFDClient
 class LiveModelWorker(BaseModelWorker):
     """Production live model worker coordinating Router4, 4 Experts, Calibrators, and X²-DFD."""
 
+    PROVENANCE_MODE = "live_server"
+
     def __init__(self):
         self.router_client = RouterClient()
         self.expert_client = ExpertClient()
@@ -98,6 +100,10 @@ class LiveModelWorker(BaseModelWorker):
         )
 
         return components
+
+    async def score_full_image(self, full_image_path: Path) -> Optional[float]:
+        async with GpuLock():
+            return self.ai_detector.try_score(full_image_path)
 
     async def analyze_image(
         self, image_path: Path, request_id: str, full_image_path: Optional[Path] = None
