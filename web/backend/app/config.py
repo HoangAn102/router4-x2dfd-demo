@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     MAX_IMAGE_DIMENSION: int = 4096
 
     # Face-crop preprocessing (models were trained on DeepfakeBench face crops)
+    FACE_CROP_BACKEND: Literal["dlib", "haar", "auto"] = "auto"
+    DEEPFAKEBENCH_PREPROCESS_DIR: str = "/home/aiotlab/hoangan/projects/DeepfakeBench/preprocessing"
+    DLIB_PREDICTOR_PATH: str = ""
     FACE_CROP_ENABLED: bool = True
     FACE_CROP_SCALE: float = 1.3
     FACE_CROP_SIZE: int = 256

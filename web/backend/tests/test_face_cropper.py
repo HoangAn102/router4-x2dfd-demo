@@ -32,6 +32,7 @@ client = TestClient(app)
 
 @pytest.fixture(autouse=True)
 def face_crop_defaults(monkeypatch):
+    monkeypatch.setattr(settings, "FACE_CROP_BACKEND", "haar")
     monkeypatch.setattr(settings, "FACE_CROP_ENABLED", True)
     monkeypatch.setattr(settings, "FACE_CROP_SCALE", 1.3)
     monkeypatch.setattr(settings, "FACE_CROP_SIZE", 256)

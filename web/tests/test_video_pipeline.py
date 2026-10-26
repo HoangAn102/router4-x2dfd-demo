@@ -46,6 +46,7 @@ def test_video_extractor_face_crop_keeps_original_frame_index(tmp_path, monkeypa
     if not FACE_IMAGE.exists():
         pytest.skip(f"Sample face image missing: {FACE_IMAGE}")
 
+    monkeypatch.setattr(settings, "FACE_CROP_BACKEND", "haar")
     monkeypatch.setattr(settings, "FACE_CROP_SIZE", 256)
 
     with Image.open(FACE_IMAGE) as img:

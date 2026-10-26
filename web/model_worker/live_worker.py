@@ -67,6 +67,18 @@ class LiveModelWorker(BaseModelWorker):
     def check_readiness(self) -> Dict[str, ReadinessComponent]:
         """Check presence and readiness of physical artifacts on research server."""
         components = {}
+        from web.backend.app.services import dlib_face_backend as dfb
+        try:
+            if settings.FACE_CROP_ENABLED:
+                selected_backend = dfb.backend()
+                crop_ready, crop_details = True, f"Backend: {selected_backend}"
+            else:
+                crop_ready, crop_details = False, "FACE_CROP_ENABLED=false; training crop disabled"
+        except dfb.FaceCropBackendUnavailable as exc:
+            crop_ready, crop_details = False, str(exc)
+        components["face_cropper"] = ReadinessComponent(
+            name="Face cropper", ready=crop_ready, details=crop_details
+        )
 
         components["router_checkpoint"] = ReadinessComponent(
             name="Router4 Checkpoint (best.pt)",

@@ -7,6 +7,7 @@ from PIL import Image
 from ..config import settings
 from ..utils.logger import logger
 from .media_validator import MediaValidationError
+from . import dlib_face_backend as dfb
 
 
 NO_FACE_DETECTED_CODE = "NO_FACE_DETECTED"
@@ -18,7 +19,7 @@ NO_FACE_DETECTED_MESSAGE = (
 
 class FaceCropper:
     """
-    Face-crop preprocessing aligned with the training data.
+    DeepfakeBench aligned dlib crop, with the existing detector chain for development.
 
     Router4, the experts and X2DFD were trained on DeepfakeBench
     face crops, so full frames are reduced to the largest detected
@@ -80,6 +81,8 @@ class FaceCropper:
         if not settings.FACE_CROP_ENABLED:
             return "disabled"
 
+        if detector == "dlib_deepfakebench_align" or dfb.backend() == "dlib":
+            return "dlib_deepfakebench_align_1.3x_256"
         return (
             f"{detector}_{settings.FACE_CROP_SCALE:g}x_"
             f"{settings.FACE_CROP_SIZE}"
@@ -253,7 +256,7 @@ class FaceCropper:
 
 
     @classmethod
-    def crop_image_with_detector(
+    def _crop_image_with_detector_dev(
         cls,
         img: Image.Image,
         fallback: bool = True,
@@ -289,11 +292,32 @@ class FaceCropper:
 
 
     @classmethod
+    def crop_image_with_detector(cls, img: Image.Image, fallback: bool = True):
+        if dfb.backend() == "haar":
+            return cls._crop_image_with_detector_dev(img, fallback=fallback)
+        import cv2
+        bgr = cv2.cvtColor(np.asarray(img.convert("RGB")), cv2.COLOR_RGB2BGR)
+        crop = dfb.aligned_bgr(bgr)
+        if crop is None:
+            return None
+        return Image.fromarray(cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)), "dlib_deepfakebench_align"
+
+    @classmethod
+    def save_model_image(cls, img: Image.Image, dst_path: Path) -> None:
+        if dfb.backend() == "dlib":
+            import cv2
+            bgr = cv2.cvtColor(np.asarray(img.convert("RGB")), cv2.COLOR_RGB2BGR)
+            if not cv2.imwrite(str(dst_path), bgr):
+                raise RuntimeError(f"cv2.imwrite failed: {dst_path}")
+        else:
+            img.save(dst_path, format="PNG")
+
+    @classmethod
     def crop_image(
         cls,
         img: Image.Image,
     ) -> Optional[Image.Image]:
-        """Strict-Haar face crop (video frames keep the original detector), or None."""
+        """Selected backend crop; dev video retains strict Haar behavior."""
 
         found = cls.crop_image_with_detector(img, fallback=False)
         return None if found is None else found[0]
@@ -311,8 +335,19 @@ class FaceCropper:
         Raises MediaValidationError(NO_FACE_DETECTED) when no face is found.
         """
 
-        with Image.open(src_path) as src:
-            found = cls.crop_image_with_detector(src)
+        if dfb.backend() == "dlib":
+            import cv2
+            bgr = cv2.imread(str(src_path), cv2.IMREAD_COLOR)
+            if bgr is None:
+                raise RuntimeError(f"cv2.imread failed: {src_path}")
+            crop = dfb.aligned_bgr(bgr)
+            found = None if crop is None else (
+                Image.fromarray(cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)),
+                "dlib_deepfakebench_align",
+            )
+        else:
+            with Image.open(src_path) as src:
+                found = cls._crop_image_with_detector_dev(src)
 
         if found is None:
             raise MediaValidationError(
@@ -322,10 +357,7 @@ class FaceCropper:
 
         cropped, detector = found
 
-        cropped.save(
-            dst_path,
-            format="PNG",
-        )
+        cls.save_model_image(cropped, dst_path)
 
         logger.info(
             "Face crop %s -> %s (%dx%d, detector=%s)",

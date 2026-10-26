@@ -168,7 +168,7 @@ async def _run_video_background_task(job_id: str, video_path: Path):
         job_manager.fail_job(
             job_id,
             ErrorDetail(
-                code="VIDEO_PROCESSING_FAILED",
+                code=getattr(e, "code", "VIDEO_PROCESSING_FAILED"),
                 stage="video_pipeline",
                 message=f"Video pipeline failed: {str(e)}",
                 details=type(e).__name__,
@@ -196,6 +196,15 @@ async def analyze_video_endpoint(
     file: UploadFile = File(...)
 ):
     """Initiate asynchronous video analysis job."""
+    from ..services import dlib_face_backend as dfb
+    try:
+        if settings.FACE_CROP_ENABLED:
+            dfb.backend()
+    except dfb.FaceCropBackendUnavailable as exc:
+        return JSONResponse(status_code=500, content=ErrorResponse(
+            request_id=str(uuid.uuid4()), error=ErrorDetail(
+                code=exc.code, stage="face_detection", message=str(exc)
+            )).model_dump())
     job_id = str(uuid.uuid4())
     logger.info(f"Received video upload request: {job_id} (filename={file.filename})")
 

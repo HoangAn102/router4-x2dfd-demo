@@ -64,8 +64,8 @@ class VideoExtractor:
                 raise RuntimeError("Video has 0 readable frames.")
 
             num_samples = min(total_frames, target_num_frames)
-            step = max(1, total_frames // num_samples)
-            sampled_indices = [i * step for i in range(num_samples)]
+            import numpy as np
+            sampled_indices = np.linspace(0, total_frames - 1, num_samples, endpoint=True, dtype=int).tolist()
 
             curr_frame = 0
             sample_ptr = 0
@@ -97,7 +97,10 @@ class VideoExtractor:
                         )
                     else:
                         frame_path = output_dir / frame_name
-                        model_img.save(frame_path, format="PNG")
+                        if crop_faces:
+                            FaceCropper.save_model_image(model_img, frame_path)
+                        else:
+                            model_img.save(frame_path, format="PNG")
 
                         try:
                             thumb_b64 = cls.encode_micro_thumbnail(pil_img)
