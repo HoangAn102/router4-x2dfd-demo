@@ -31,7 +31,9 @@ class Settings(BaseSettings):
     # Previously 0.38, the threshold the team used in
     # source_snapshot/final_clean_integration/03_wfs/patched_route_test_locked038.py
     ROUTER_LOW_CONFIDENCE: float = 0.30
-    EXPERT_NEUTRAL_BAND: float = 0.10
+    # Disabled: calibrated floors (blending 0.45, texture 0.56) sit inside 0.4-0.6,
+    # so this flagged 51% of REAL val images (152/300). Keep 0.0 unless re-validated.
+    EXPERT_NEUTRAL_BAND: float = 0.0
 
     # Multi-Tier Timeouts (seconds)
     IMAGE_INFERENCE_TIMEOUT_SEC: int = 60
