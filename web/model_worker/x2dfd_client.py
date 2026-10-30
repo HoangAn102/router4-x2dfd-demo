@@ -232,9 +232,18 @@ class X2DFDClient:
 
             for attempt in range(2):
 
+                fresh = self._proc is None or self._proc.returncode is not None
                 await self._ensure_worker()
 
                 proc = self._proc
+
+                # The first request after a (re)start also pays for loading LLaVA + LoRA
+                # (60 s was not enough on a busy GPU and the kill-on-timeout restarted the load).
+                timeout = (
+                    settings.EXPERT_INFERENCE_TIMEOUT_SEC
+                    if fresh
+                    else settings.IMAGE_INFERENCE_TIMEOUT_SEC
+                )
 
                 try:
 
@@ -259,7 +268,7 @@ class X2DFDClient:
 
                     raw = await asyncio.wait_for(
                         proc.stdout.readline(),
-                        timeout=settings.IMAGE_INFERENCE_TIMEOUT_SEC,
+                        timeout=timeout,
                     )
 
                     if not raw:
