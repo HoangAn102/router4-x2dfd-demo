@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     MAX_VIDEO_SIZE_MB: int = 100
     MAX_VIDEO_DURATION_SEC: int = 60
     MAX_IMAGE_DIMENSION: int = 4096
+    # A frontal face needs dlib's 80x80 HOG window after its 1x upsample; below this nothing can be detected.
+    MIN_IMAGE_DIMENSION: int = 64
 
     # Face-crop preprocessing (models were trained on DeepfakeBench face crops)
     FACE_CROP_BACKEND: Literal["dlib", "haar", "auto"] = "auto"

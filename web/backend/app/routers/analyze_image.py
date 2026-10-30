@@ -14,6 +14,13 @@ from web.model_worker.worker_factory import get_model_worker
 router = APIRouter(prefix="/api/v1/analyze", tags=["Image Analysis"])
 
 
+def _is_timeout(exc: Exception) -> bool:
+    """Expert subprocess or persistent X2DFD worker exceeded its time budget."""
+    from ..utils.subprocess_runner import SubprocessTimeoutError
+
+    return isinstance(exc, (SubprocessTimeoutError, TimeoutError)) or "timed out" in str(exc)
+
+
 @router.post(
     "/image",
     response_model=ImageAnalyzeResponse,
@@ -103,7 +110,7 @@ async def analyze_image_endpoint(file: UploadFile = File(...)):
                     error=ErrorDetail(
                         code=getattr(e, "code", "FACE_CROP_FAILED"),
                         stage="face_detection",
-                        message="Face detection/cropping failed.",
+                        message="Lỗi ở bước phát hiện/cắt khuôn mặt.",
                         details=str(e),
                     )
                 ).model_dump()
@@ -117,15 +124,24 @@ async def analyze_image_endpoint(file: UploadFile = File(...)):
             return result
         except Exception as e:
             logger.error(f"Inference pipeline failed for {request_id}: {e}", exc_info=True)
+            timed_out = _is_timeout(e)
             return JSONResponse(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status_code=(
+                    status.HTTP_504_GATEWAY_TIMEOUT
+                    if timed_out
+                    else status.HTTP_500_INTERNAL_SERVER_ERROR
+                ),
                 content=ErrorResponse(
                     request_id=request_id,
                     error=ErrorDetail(
-                        code="INFERENCE_FAILED",
+                        code="INFERENCE_TIMEOUT" if timed_out else "INFERENCE_FAILED",
                         stage="model_pipeline",
-                        message=f"Deepfake detection pipeline failed: {str(e)}",
-                        details=type(e).__name__,
+                        message=(
+                            "Máy chủ mô hình phản hồi quá thời gian. Vui lòng thử lại sau ít phút."
+                            if timed_out
+                            else "Lỗi khi chạy mô hình phát hiện deepfake. Vui lòng thử lại."
+                        ),
+                        details=f"{type(e).__name__}: {e}",
                     )
                 ).model_dump()
             )

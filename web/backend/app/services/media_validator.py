@@ -72,8 +72,8 @@ class MediaValidator:
         raise MediaValidationError(
             "INVALID_MAGIC_BYTES",
             (
-                "File format signature not recognized. "
-                "Supported images: JPEG/JPG/MPO, PNG, WEBP."
+                "Định dạng tệp không được hỗ trợ. "
+                "Ảnh hợp lệ: JPEG/JPG/MPO, PNG, WEBP."
             ),
         )
 
@@ -104,7 +104,7 @@ class MediaValidator:
         ):
             raise MediaValidationError(
                 "EMPTY_FILE",
-                "Uploaded file is empty (0 bytes).",
+                "Tệp tải lên rỗng (0 byte).",
             )
 
         size_mb = (
@@ -119,9 +119,8 @@ class MediaValidator:
             raise MediaValidationError(
                 "IMAGE_SIZE_EXCEEDED",
                 (
-                    f"Image size ({size_mb:.2f}MB) "
-                    "exceeds maximum allowed "
-                    f"({settings.MAX_IMAGE_SIZE_MB}MB)."
+                    f"Ảnh quá lớn ({size_mb:.2f} MB), "
+                    f"tối đa {settings.MAX_IMAGE_SIZE_MB} MB."
                 ),
             )
 
@@ -167,8 +166,7 @@ class MediaValidator:
             raise MediaValidationError(
                 "CORRUPTED_IMAGE",
                 (
-                    "Image file is corrupted "
-                    "and cannot be decoded: "
+                    "Ảnh bị hỏng, không đọc được: "
                     f"{exc}"
                 ),
             )
@@ -182,9 +180,8 @@ class MediaValidator:
             raise MediaValidationError(
                 "ANIMATED_IMAGE_UNSUPPORTED",
                 (
-                    "Animated/multi-frame PNG or WEBP "
-                    "is not supported by the single-image detector. "
-                    "Please upload one static frame."
+                    "Không hỗ trợ ảnh động (PNG/WEBP nhiều khung). "
+                    "Hãy tải lên một ảnh tĩnh."
                 ),
             )
 
@@ -222,9 +219,20 @@ class MediaValidator:
             raise MediaValidationError(
                 "IMAGE_DIMENSION_EXCEEDED",
                 (
-                    f"Image resolution {width}x{height} "
-                    "exceeds limit of "
+                    f"Độ phân giải {width}x{height} vượt giới hạn "
                     f"{settings.MAX_IMAGE_DIMENSION}px."
+                ),
+            )
+
+        if (
+            min(width, height)
+            < settings.MIN_IMAGE_DIMENSION
+        ):
+            raise MediaValidationError(
+                "IMAGE_TOO_SMALL",
+                (
+                    f"Ảnh quá nhỏ ({width}x{height}); cạnh ngắn cần ít nhất "
+                    f"{settings.MIN_IMAGE_DIMENSION}px để phát hiện khuôn mặt."
                 ),
             )
 
@@ -379,7 +387,7 @@ class MediaValidator:
             raise MediaValidationError(
                 "IMAGE_NORMALIZATION_FAILED",
                 (
-                    "Image could not be normalized: "
+                    "Không chuẩn hoá được ảnh: "
                     f"{exc}"
                 ),
             )
