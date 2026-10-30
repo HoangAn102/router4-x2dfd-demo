@@ -338,11 +338,13 @@ def server_mode(args):
 
 def oneshot_mode(args):
 
-    infer_fn = _load_infer_function()
+    score_fn, explain_fn = _load_infer_function()
 
     try:
         result = _run_one(
-            infer_fn,
+            score_fn,
+            explain_fn,
+            mode=args.mode,
             image=args.image,
             prompt=args.prompt,
             lora_dir=args.lora_dir,
