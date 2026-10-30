@@ -77,7 +77,7 @@ async def analyze_image_endpoint(file: UploadFile = File(...)):
             )
 
             inference_path = file_path
-            face_detector = "haar"
+            face_detector = None
 
             if settings.FACE_CROP_ENABLED:
                 inference_path, face_detector = FaceCropper.crop_face_file_with_detector(

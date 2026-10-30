@@ -76,12 +76,15 @@ class FaceCropper:
 
 
     @staticmethod
-    def provenance_tag(detector: str = "haar") -> str:
+    def provenance_tag(detector: Optional[str] = None) -> str:
 
         if not settings.FACE_CROP_ENABLED:
             return "disabled"
 
-        if detector == "dlib_deepfakebench_align" or dfb.backend() == "dlib":
+        if detector is None:  # batch callers (video): the configured primary detector
+            detector = "dlib_deepfakebench_align" if dfb.backend() == "dlib" else "haar"
+
+        if detector == "dlib_deepfakebench_align":
             return "dlib_deepfakebench_align_1.3x_256"
         return (
             f"{detector}_{settings.FACE_CROP_SCALE:g}x_"
@@ -292,6 +295,19 @@ class FaceCropper:
 
 
     @classmethod
+    def _fallback_after_dlib(cls, img: Image.Image) -> Optional[Tuple[Image.Image, str]]:
+        """dlib (training crop) found no face: YuNet, then strict Haar; square 1.3x box, 256 LANCZOS."""
+
+        img = img.convert("RGB")
+        for name, detect in (("yunet", cls._detect_yunet), ("haar", cls.detect_largest_face)):
+            face = detect(img)
+            if face is not None:
+                box = cls._square_box(face, img.width, img.height)
+                size = int(settings.FACE_CROP_SIZE)
+                return img.crop(box).resize((size, size), Image.Resampling.LANCZOS), name
+        return None
+
+    @classmethod
     def crop_image_with_detector(cls, img: Image.Image, fallback: bool = True):
         if dfb.backend() == "haar":
             return cls._crop_image_with_detector_dev(img, fallback=fallback)
@@ -299,7 +315,8 @@ class FaceCropper:
         bgr = cv2.cvtColor(np.asarray(img.convert("RGB")), cv2.COLOR_RGB2BGR)
         crop = dfb.aligned_bgr(bgr)
         if crop is None:
-            return None
+            # Images dlib handles keep the exact training crop; only misses fall back.
+            return cls._fallback_after_dlib(img) if fallback else None
         return Image.fromarray(cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)), "dlib_deepfakebench_align"
 
     @classmethod
@@ -341,10 +358,14 @@ class FaceCropper:
             if bgr is None:
                 raise RuntimeError(f"cv2.imread failed: {src_path}")
             crop = dfb.aligned_bgr(bgr)
-            found = None if crop is None else (
-                Image.fromarray(cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)),
-                "dlib_deepfakebench_align",
-            )
+            if crop is not None:
+                found = (
+                    Image.fromarray(cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)),
+                    "dlib_deepfakebench_align",
+                )
+            else:
+                with Image.open(src_path) as src:
+                    found = cls._fallback_after_dlib(src)
         else:
             with Image.open(src_path) as src:
                 found = cls._crop_image_with_detector_dev(src)

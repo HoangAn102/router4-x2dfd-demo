@@ -171,3 +171,42 @@ def test_real_dlib_integration(monkeypatch, tmp_path):
     output = tmp_path / "crop.png"
     FaceCropper.crop_face_file(source, output)
     np.testing.assert_array_equal(cv2.imread(str(output)), direct)
+
+
+def _dlib_misses(monkeypatch):
+    monkeypatch.setattr(settings, "FACE_CROP_BACKEND", "dlib")
+    monkeypatch.setattr(dfb, "runtime", lambda: (lambda d, p, image: (None, None, None), object(), object()))
+
+
+def test_dlib_miss_falls_back_to_yunet_then_haar(monkeypatch, tmp_path):
+    _dlib_misses(monkeypatch)
+    img = Image.new("RGB", (400, 400), (90, 90, 90))
+    monkeypatch.setattr(FaceCropper, "_detect_yunet", classmethod(lambda cls, im: (100, 100, 120, 120)))
+    monkeypatch.setattr(FaceCropper, "detect_largest_face", classmethod(lambda cls, im: pytest.fail("haar before yunet")))
+    crop, det = FaceCropper.crop_image_with_detector(img)
+    assert det == "yunet" and crop.size == (256, 256)
+    assert FaceCropper.provenance_tag(det) == "yunet_1.3x_256"
+
+    monkeypatch.setattr(FaceCropper, "_detect_yunet", classmethod(lambda cls, im: None))
+    monkeypatch.setattr(FaceCropper, "detect_largest_face", classmethod(lambda cls, im: (50, 60, 100, 100)))
+    src = tmp_path / "a.png"
+    img.save(src)
+    out, det = FaceCropper.crop_face_file_with_detector(src, tmp_path / "a.face.png")
+    assert det == "haar" and out.exists()
+
+
+def test_dlib_hit_keeps_training_crop(monkeypatch):
+    monkeypatch.setattr(settings, "FACE_CROP_BACKEND", "dlib")
+    aligned = np.full((256, 256, 3), 7, dtype=np.uint8)
+    monkeypatch.setattr(dfb, "runtime", lambda: (lambda d, p, image: (aligned, np.zeros((81, 2)), None),
+                                                 object(), object()))
+    monkeypatch.setattr(FaceCropper, "_detect_yunet", classmethod(lambda cls, im: pytest.fail("fallback used")))
+    crop, det = FaceCropper.crop_image_with_detector(Image.new("RGB", (300, 300)))
+    assert det == "dlib_deepfakebench_align"
+    assert FaceCropper.provenance_tag(det) == "dlib_deepfakebench_align_1.3x_256"
+
+
+def test_dlib_miss_without_fallback_for_video(monkeypatch):
+    _dlib_misses(monkeypatch)
+    monkeypatch.setattr(FaceCropper, "_detect_yunet", classmethod(lambda cls, im: pytest.fail("fallback used")))
+    assert FaceCropper.crop_image_with_detector(Image.new("RGB", (300, 300)), fallback=False) is None
