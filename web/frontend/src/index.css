@@ -880,6 +880,13 @@ body {
   color: var(--text-strong);
 }
 
+.explanation-note {
+  margin-top: 10px;
+  font-size: 0.8rem;
+  font-style: italic;
+  color: var(--text-muted);
+}
+
 /* Video Fail-Closed Notice */
 .blocked-notice {
   padding: 16px 20px;

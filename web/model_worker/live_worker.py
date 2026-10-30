@@ -163,6 +163,8 @@ class LiveModelWorker(BaseModelWorker):
                 "mode": "live_server",
                 "router_checkpoint": Path(settings.ROUTER_CHECKPOINT).name,
                 "lora_adapter": Path(settings.ROUTER4_LORA_DIR).name,
+                "calibrators": Path(settings.CALIBRATORS_PATH).name,
+                "llava_uses_image": str(settings.LORA_PROMPT_HAS_IMAGE).lower(),
             }
         )
 
