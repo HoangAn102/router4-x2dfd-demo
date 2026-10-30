@@ -359,7 +359,7 @@ class X2DFDClient:
 
         verdict = (
             "FAKE"
-            if fake >= 0.5
+            if fake >= settings.DECISION_THRESHOLD
             else "REAL"
         )
 
@@ -446,7 +446,7 @@ class X2DFDClient:
             real_probability=real,
 
             continuous_score=fake,
-            decision_threshold=0.5,
+            decision_threshold=settings.DECISION_THRESHOLD,
 
             explanation=explanation,
         )

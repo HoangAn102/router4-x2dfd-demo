@@ -71,6 +71,9 @@ class Settings(BaseSettings):
     # Whether the LoRA's SFT prompts carried "<image>" (i.e. LLaVA actually looks at the face crop).
     # router4_x2dfd_FINAL_CLEAN: False (0/24,000 SFT prompts had the token; audit 2026-10-30).
     LORA_PROMPT_HAS_IMAGE: bool = False
+    # FAKE when the LLaVA fake probability >= this. Changed only from a DEV-chosen value (FFPP val + DFF val,
+    # never test) that lowers dev FPR while recall drops <= 2 points (ROOT_FIX_PLAN R6.4).
+    DECISION_THRESHOLD: float = 0.5
 
     # Python Execution Wrappers (Verified from runtime_clean_v2)
     X2PYTHON_BIN: str = "/home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/runtime_clean_v2/x2python"
