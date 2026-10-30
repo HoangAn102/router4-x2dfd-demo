@@ -59,9 +59,16 @@ class ExpertClient:
 
         bundle = joblib.load(path)
 
+        # FINAL_CLEAN bundle: {"experts": {name: iso}}; router_teacher_v2 bundle:
+        # {"experts": [names], "calibrators": {name: iso}}; v1: {name: iso}.
         if (
             isinstance(bundle, dict)
-            and "experts" in bundle
+            and isinstance(bundle.get("calibrators"), dict)
+        ):
+            self.calibrators = bundle["calibrators"]
+        elif (
+            isinstance(bundle, dict)
+            and isinstance(bundle.get("experts"), dict)
         ):
             self.calibrators = bundle["experts"]
         else:

@@ -60,7 +60,10 @@ class Settings(BaseSettings):
 
     # Artifact & Checkpoint Paths (Verified from runtime_context & source_snapshot)
     ROUTER_CHECKPOINT: str = "/home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/02_router/final_checkpoint/best.pt"
-    CALIBRATORS_PATH: str = "/home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/01_teacher/calibrators_FINAL_CLEAN.joblib"
+    # The calibrator that produced the scores in the LoRA's SFT prompts. The FINAL_CLEAN SFT json is a byte copy
+    # of ROUTER4_NATIVE_X2DFD_24K_20260915 (sha 05814535…), whose scores come from router_teacher_v2
+    # (median |diff| <= 0.002 vs 0.011-0.047 for calibrators_FINAL_CLEAN.joblib; audit 2026-10-30, AUDIT.md P3).
+    CALIBRATORS_PATH: str = "/home/aiotlab/hoangan/outputs/router_teacher_v2/calibrators_train_only.joblib"
     ROUTER4_LORA_DIR: str = "/home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/05_lora/router4_x2dfd_FINAL_CLEAN"
     BASE_LLAVA_DIR: str = "/home/aiotlab/hoangan/projects/X2DFD/weights/base/llava-v1.5-7b"
 
