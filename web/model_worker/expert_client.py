@@ -191,6 +191,10 @@ class ExpertClient:
                 if not path or raw in (None, ""):
                     continue
 
+                # Wrappers may echo a different spelling of the same file
+                # (symlinked tmp dir, relative path); compare resolved paths.
+                path = str(Path(path).expanduser().resolve())
+
                 if path not in expected:
                     raise ExpertInferenceError(
                         f"Expert returned unexpected image path: {path}"
