@@ -6,10 +6,10 @@ from web.model_worker.x2dfd_client import FinalScoreUnavailableError, X2DFDClien
 def test_wfs_prompt_builder():
     client = X2DFDClient()
     prompt = client.build_wfs_prompt("Frequency", 0.812)
-    assert prompt == "<image>\nIs this image real or fake? And the frequency score is 0.812."
+    assert prompt == "\nIs this image real or fake? And the frequency score is 0.812."
 
     prompt_blend = client.build_wfs_prompt("Blending", 0.054)
-    assert prompt_blend == "<image>\nIs this image real or fake? And the blending score is 0.054."
+    assert prompt_blend == "\nIs this image real or fake? And the blending score is 0.054."
 
 
 def test_x2dfd_validate_scores_rejections():

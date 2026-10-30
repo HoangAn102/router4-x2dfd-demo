@@ -49,10 +49,11 @@ class X2DFDClient:
         calibrated_score: float,
     ) -> str:
 
+        # Byte-identical to the human turn of every sample in
+        # 04_sft/router4_x2dfd_FINAL_CLEAN_SFT.json (leading "\n", no "<image>",
+        # lowercase alias, 3 decimals); x2dfd_worker_cli wraps it in conv "v1".
         return (
-            "<image>\n"
-            "Is this image real or fake? "
-            # Training prompts use the lowercase alias.
+            "\nIs this image real or fake? "
             f"And the {selected_alias.lower()} score is "
             f"{calibrated_score:.3f}."
         )
