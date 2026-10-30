@@ -60,11 +60,9 @@ def build_train_prompt(question):
 
     from llava.conversation import conv_templates
 
-    if "<image>" in question:
-        raise ValueError(
-            "SFT prompts contain no <image> token; "
-            "refusing a prompt the LoRA never saw"
-        )
+    if question.count("<image>") > 1 or ("<image>" in question and not question.startswith("<image>\n")):
+        # LLaVA preprocess_multimodal moves the single <image> to the front as "<image>\n".
+        raise ValueError("Training prompts carry at most one leading '<image>\\n'")
 
     conv = conv_templates[TRAIN_CONV_TEMPLATE].copy()
     conv.append_message(conv.roles[0], question)
@@ -73,7 +71,7 @@ def build_train_prompt(question):
     return conv.get_prompt()
 
 
-def _generate(question, model_path, model_base, max_new_tokens, with_scores):
+def _generate(question, model_path, model_base, max_new_tokens, with_scores, image_path=None):
 
     _x2root()
 
@@ -83,10 +81,26 @@ def _generate(question, model_path, model_base, max_new_tokens, with_scores):
     from llava.mm_utils import tokenizer_image_token
     from utils.lora_inference import _get_or_load_model
 
-    tokenizer, model, _, _ = _get_or_load_model(
+    tokenizer, model, image_processor, _ = _get_or_load_model(
         model_path,
         model_base,
     )
+
+    # Image features only when the prompt has the token, exactly as LLaVA training
+    # (LazySupervisedDataset: expand2square pad with processor mean, CLIP preprocess).
+    image_kwargs = {}
+    if "<image>" in question:
+        from PIL import Image
+        from llava.mm_utils import process_images
+
+        if image_path is None:
+            raise ValueError("Prompt has <image> but no image was given")
+        img = Image.open(image_path).convert("RGB")
+        dtype = next(model.parameters()).dtype
+        image_kwargs = dict(
+            images=process_images([img], image_processor, model.config).to(model.device, dtype=dtype),
+            image_sizes=[img.size],
+        )
 
     input_ids = tokenizer_image_token(
         build_train_prompt(question),
@@ -105,12 +119,13 @@ def _generate(question, model_path, model_base, max_new_tokens, with_scores):
             use_cache=True,
             return_dict_in_generate=True,
             output_scores=with_scores,
+            **image_kwargs,
         )
 
     return tokenizer, out
 
 
-def score_with_train_prompt(question, *, model_path, model_base, max_new_tokens=4):
+def score_with_train_prompt(question, *, model_path, model_base, max_new_tokens=4, image_path=None):
     """REAL/FAKE pairwise softmax of the logits at the first generated real/fake token
     (same read-out as X2DFD X2DFD_CONTINUOUS_SCORE_V3)."""
 
@@ -122,6 +137,7 @@ def score_with_train_prompt(question, *, model_path, model_base, max_new_tokens=
         model_base,
         max_new_tokens,
         True,
+        image_path,
     )
 
     generated = out.sequences[0][-len(out.scores):].tolist()
@@ -166,7 +182,7 @@ def score_with_train_prompt(question, *, model_path, model_base, max_new_tokens=
     }
 
 
-def explain_with_train_prompt(question, *, model_path, model_base, max_new_tokens=512):
+def explain_with_train_prompt(question, *, model_path, model_base, max_new_tokens=512, image_path=None):
 
     tokenizer, out = _generate(
         question,
@@ -174,6 +190,7 @@ def explain_with_train_prompt(question, *, model_path, model_base, max_new_token
         model_base,
         max_new_tokens,
         False,
+        image_path,
     )
 
     return tokenizer.batch_decode(
@@ -220,14 +237,14 @@ def _run_one(
 
         if mode == "score":
 
-            # The image is validated above but not tokenized: the LoRA was trained
-            # without image tokens (see build_train_prompt). Router4 and the
-            # experts are the image-dependent stages.
+            # The image is only tokenized when the prompt has "<image>" (LoRA trained
+            # with image tokens); FINAL_CLEAN prompts have none (see build_train_prompt).
             result = score_fn(
                 prompt,
                 model_path=lora_dir,
                 model_base=base_model,
                 max_new_tokens=max_new_tokens,
+                image_path=str(image_path),
             )
 
             return {
@@ -249,6 +266,7 @@ def _run_one(
                 model_path=lora_dir,
                 model_base=base_model,
                 max_new_tokens=max_new_tokens,
+                image_path=str(image_path),
             )
 
             return {

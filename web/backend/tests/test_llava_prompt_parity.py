@@ -24,6 +24,13 @@ class PromptStringTests(unittest.TestCase):
         self.assertEqual(p, "\nIs this image real or fake? And the texture score is 1.000.")
         self.assertNotIn("<image>", p)
 
+    def test_image_prefix_when_lora_trained_with_images(self):
+        from unittest import mock
+        from web.backend.app.config import settings
+        with mock.patch.object(settings, "LORA_PROMPT_HAS_IMAGE", True):
+            p = X2DFDClient.build_wfs_prompt("Diffusion", 0.5)
+        self.assertEqual(p, "<image>\nIs this image real or fake? And the diffusion score is 0.500.")
+
     @unittest.skipUnless(SFT_JSON.exists(), "SFT json not on this machine")
     def test_matches_sft_human_turns(self):
         import re
@@ -65,6 +72,16 @@ class TokenParityTests(unittest.TestCase):
                                          IMAGE_TOKEN_INDEX)
             self.assertEqual(live, train_prompt)
             self.assertNotIn(IMAGE_TOKEN_INDEX, live)
+
+            # V3 SFT format (author's "<image>\n" prefix): one image token, same position as training
+            conv = copy.deepcopy(it["conversations"])
+            conv[0]["value"] = "<image>" + conv[0]["value"]
+            out = T.preprocess(T.preprocess_multimodal([conv], DA()), tok, has_image=True)
+            ids, labels = out["input_ids"][0], out["labels"][0]
+            train_prompt = ids[:int((labels != -100).nonzero()[0])].tolist()
+            live = tokenizer_image_token(build_train_prompt(conv[0]["value"]), tok, IMAGE_TOKEN_INDEX)
+            self.assertEqual(live, train_prompt)
+            self.assertEqual(live.count(IMAGE_TOKEN_INDEX), 1)
 
 
 if __name__ == "__main__":

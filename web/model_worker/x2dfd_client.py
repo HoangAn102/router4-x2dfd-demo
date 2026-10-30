@@ -52,8 +52,10 @@ class X2DFDClient:
         # Byte-identical to the human turn of every sample in
         # 04_sft/router4_x2dfd_FINAL_CLEAN_SFT.json (leading "\n", no "<image>",
         # lowercase alias, 3 decimals); x2dfd_worker_cli wraps it in conv "v1".
+        # LoRA V3 (SFT with the X2DFD author's "<image>\n" prefix): LORA_PROMPT_HAS_IMAGE=true.
         return (
-            "\nIs this image real or fake? "
+            ("<image>" if settings.LORA_PROMPT_HAS_IMAGE else "")
+            + "\nIs this image real or fake? "
             f"And the {selected_alias.lower()} score is "
             f"{calibrated_score:.3f}."
         )

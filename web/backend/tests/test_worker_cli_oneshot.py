@@ -40,9 +40,10 @@ class OneShotTests(unittest.TestCase):
                 cli.oneshot_mode(self._args("/nonexistent/x.png"))
         self.assertEqual(cm.exception.code, 1)
 
-    def test_prompt_with_image_token_rejected(self):
-        with self.assertRaises(ValueError):
-            cli.build_train_prompt("<image>\nIs this image real or fake?")
+    def test_misplaced_image_token_rejected(self):
+        for q in ("Is this image <image> real?", "<image>\n<image>\nIs this image real or fake?"):
+            with self.assertRaises(ValueError):
+                cli.build_train_prompt(q)
 
 
 if __name__ == "__main__":
