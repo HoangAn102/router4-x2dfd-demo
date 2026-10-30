@@ -62,6 +62,18 @@ export default function FrameTimeline({ frames, onSeekFrame }) {
               <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '4px' }}>
                 Chuyên gia Router4: <strong style={{ color: 'var(--text-strong)' }}>{currentFrame.selected_expert}</strong> • Điểm chuyên gia: <strong>{((currentFrame.expert_score || 0) * 100).toFixed(1)}%</strong>
               </div>
+              {currentFrame.reliability?.level === 'low' && (
+                <div className="reliability-warning" role="alert" style={{ marginTop: '8px' }}>
+                  <div>
+                    <div className="reliability-warning-title">Độ tin cậy thấp ở frame này (chỉ tham khảo).</div>
+                    {(currentFrame.reliability.reasons || []).length > 0 && (
+                      <ul className="reliability-warning-list">
+                        {currentFrame.reliability.reasons.map((reason, i) => <li key={i}>{reason}</li>)}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

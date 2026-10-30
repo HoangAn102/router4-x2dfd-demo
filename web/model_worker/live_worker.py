@@ -359,6 +359,11 @@ class LiveModelWorker(BaseModelWorker):
 
                         thumbnail_b64=
                             item.get("thumbnail_b64"),
+
+                        reliability=assess_reliability(
+                            row["router_confidence"],
+                            calibrated,
+                        ),
                     )
                 )
 
@@ -377,7 +382,7 @@ class LiveModelWorker(BaseModelWorker):
     ) -> FrameResult:
         """Run single-frame through the complete Router -> Expert -> Calibrator -> X²-DFD pipeline."""
         async with GpuLock():
-            selected_expert, selected_alias, _, _ = self.router_client.route_image(frame_path)
+            selected_expert, selected_alias, router_conf, _ = self.router_client.route_image(frame_path)
             raw_score, calibrated_score = await self.expert_client.compute_expert_score(selected_expert, frame_path)
             final_result = await self.x2dfd_client.infer(
                 frame_path,
@@ -394,6 +399,7 @@ class LiveModelWorker(BaseModelWorker):
             final_frame_score=final_result.continuous_score,
             verdict=final_result.verdict,
             thumbnail_b64=None,
+            reliability=assess_reliability(router_conf, calibrated_score),
         )
 
     def aggregate_video(

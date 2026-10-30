@@ -2,6 +2,7 @@ import math
 from typing import Dict, List, Literal, Optional
 from pydantic import BaseModel, Field, field_validator
 from .common import ErrorDetail
+from .image import Reliability
 
 
 class FrameResult(BaseModel):
@@ -12,6 +13,8 @@ class FrameResult(BaseModel):
     final_frame_score: float = Field(..., ge=0.0, le=1.0)
     verdict: Literal["REAL", "FAKE"]
     thumbnail_b64: Optional[str] = Field(None, description="Optional 128x128 JPEG Base64 thumbnail")
+    # Same presentation-only flag as single images; never changes verdict or scores.
+    reliability: Reliability = Field(default_factory=Reliability)
 
     @field_validator("expert_score", "final_frame_score", mode="before")
     @classmethod
