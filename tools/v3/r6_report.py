@@ -1,7 +1,7 @@
 """R6 (full): metrics, 95% video-bootstrap CIs (1,000), DEV-chosen thresholds, GATE R6, (b) vs (b-old).
 
-Inputs in --dir: frames_full.csv (r6_frames.py), results_V3.csv, results_bold.csv, results_V3_gray.csv,
-author_out_<dataset>.json (eval.infer.runner). Missing systems are skipped (reported as absent).
+Inputs in --dir: frames_full.csv (r6_frames.py), results_{V3,bold,a}.csv (r6_batched.py), results_V3_gray.csv
+(r6_llava.py), optionally author_out_<dataset>.json (eval.infer.runner run directly). Missing systems are skipped (reported as absent).
 Thresholds: for each system, t_dev = argmax(TPR - FPR) on DEV (FFPP val + DFF val, never test), then applied to test.
 GATE R6 (ROOT_FIX_PLAN): V3 vs interim — FFPP frame AUC not lower by > 0.5 pt, higher on >= 2 of CDF/DFDCP/DFF_test,
 FPR(real) @0.5 not higher by > 1 pt on any test set.
@@ -29,13 +29,13 @@ TEST = ["FFPP", "CDF", "DFDCP", "DFF_test"]
 
 def load(d):
     df = pd.read_csv(d / "frames_full.csv")
-    for s in ("V3", "bold", "V3_gray"):
+    df["a_fake"] = np.nan
+    for s in ("V3", "bold", "V3_gray", "a"):
         f = d / f"results_{s}.csv"
         if f.exists():
             r = pd.read_csv(f).drop_duplicates("image_path").set_index("image_path")[f"{s}_fake"]
             df[f"{s}_fake"] = df.image_path.map(r)
-    df["a_fake"] = np.nan
-    for f in d.glob("author_out_*.json"):
+    for f in d.glob("author_out_*.json"):  # eval.infer.runner outputs, if run directly
         rows = [dict(path=p) for p in df.image_path]
         B.read_author(f, rows)
         got = pd.Series([r["a_fake"] for r in rows], index=df.index).replace("", np.nan).astype(float)
