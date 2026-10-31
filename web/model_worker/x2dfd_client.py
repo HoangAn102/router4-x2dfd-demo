@@ -357,6 +357,11 @@ class X2DFDClient:
             response.get("fake_score"),
         )
 
+        # Older workers did not report it; their read-out required an on-template answer.
+        on_template = response.get("on_template") is not False
+        if not on_template:
+            logger.warning("X2DFD answer off-template; teacher-forced label-slot score used (fake=%.6f)", fake)
+
         verdict = (
             "FAKE"
             if fake >= settings.DECISION_THRESHOLD
@@ -447,6 +452,7 @@ class X2DFDClient:
 
             continuous_score=fake,
             decision_threshold=settings.DECISION_THRESHOLD,
+            on_template=on_template,
 
             explanation=explanation,
         )
