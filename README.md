@@ -30,3 +30,9 @@ This repository contains the snapshot of all components required to run and eval
 │   └── server_wrappers/         # Server-side inference and verification runners
 └── README.md
 ```
+
+## Deployed configuration and evaluation (31/10/2026, tag `final-interim`)
+
+- Live web = lineage **(b) parity v2**: Router v2 + isotonic calibrator v2 + LoRA `router4_x2dfd_FINAL_CLEAN`, LLaVA prompt token-identical to SFT (conv `v1`), teacher-forced real/fake read-out, `DECISION_THRESHOLD = 0.74908721` (chosen on DEV only).
+- The full-test-split evaluation (R6) was pre-registered in `docs/PREREG_R6.md`. GATE R6 (V3 vs interim) was **not met**, so the V3 lineage is not deployed. Metrics, leakage check, independent recomputation, deploy smoke tests and limitations are in the server report `eval_runs/final_audit/REPORT.md`.
+- Tests: `python -m pytest -q web/tests web/backend/tests`.
