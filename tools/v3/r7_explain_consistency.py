@@ -1,7 +1,7 @@
 """R7 (2): how often does the explanation's first sentence state the same label as the score verdict?
 
 Stratified sample of the R6 TEST frames (dataset x label, one frame per video, seed 0, --per frames per stratum).
-Explanation = the web worker's explain_with_train_prompt (training prompt ids, greedy, 512 tokens, unmodified);
+Explanation = the web worker's explain_with_train_prompt (training prompt ids, greedy, --max-new-tokens, unmodified);
 label = X2DFDClient.explanation_label (the web's flag); verdict = R6 score >= --threshold. Report only.
 
     x2python tools/v3/r7_explain_consistency.py --r6 r6_full --system V3 --lora LORA_V3 --out DIR/explain_V3.csv
@@ -34,6 +34,9 @@ def main():
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--per", type=int, default=38)
     ap.add_argument("--threshold", type=float, default=0.5)
+    # greedy decoding: the first sentence (where the label is) does not depend on the generation length, so a short
+    # budget gives the same label as the web's 512-token explanation; the stored text is then the opening only
+    ap.add_argument("--max-new-tokens", type=int, default=512)
     a = ap.parse_args()
 
     import x2dfd_worker_cli as W
@@ -57,7 +60,7 @@ def main():
             w.writeheader()
         for i, r in enumerate(s[~s.image_path.isin(done)].itertuples()):
             q = f"{r.img}Is this image real or fake? And the {r.expert} score is {r.cal:.3f}."
-            text = W.explain_with_train_prompt(q, model_path=a.lora, model_base=BASE, max_new_tokens=512,
+            text = W.explain_with_train_prompt(q, model_path=a.lora, model_base=BASE, max_new_tokens=a.max_new_tokens,
                                                image_path=r.image_path)
             verdict = "FAKE" if r.fake >= a.threshold else "REAL"
             lab = X2DFDClient.explanation_label(text)

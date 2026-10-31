@@ -72,8 +72,10 @@ class Settings(BaseSettings):
     # router4_x2dfd_FINAL_CLEAN: False (0/24,000 SFT prompts had the token; audit 2026-10-30).
     LORA_PROMPT_HAS_IMAGE: bool = False
     # FAKE when the LLaVA fake probability >= this. Changed only from a DEV-chosen value (FFPP val + DFF val,
-    # never test) that lowers dev FPR while recall drops <= 2 points (ROOT_FIX_PLAN R6.4).
-    DECISION_THRESHOLD: float = 0.5
+    # never test) that lowers dev FPR while recall drops <= 2 points (ROOT_FIX_PLAN R6.4, PREREG §4).
+    # R6 (31/10): lineage (b) above -> Youden t_dev 0.74908721 (dev FPR 0.145 -> 0.129, recall 0.764 -> 0.752).
+    # Lineage V3 keeps 0.5 (its t_dev 0.461 raises dev FPR): set DECISION_THRESHOLD=0.5 when switching to V3.
+    DECISION_THRESHOLD: float = 0.74908721
 
     # Python Execution Wrappers (Verified from runtime_clean_v2)
     X2PYTHON_BIN: str = "/home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/runtime_clean_v2/x2python"

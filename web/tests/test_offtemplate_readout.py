@@ -59,6 +59,7 @@ def test_worker_run_one_passes_flag(tmp_path):
 
 
 def test_client_keeps_flag_and_verdict(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "DECISION_THRESHOLD", 0.5)
     img = tmp_path / "f.png"
     Image.new("RGB", (64, 64)).save(img)
     c = X2DFDClient()

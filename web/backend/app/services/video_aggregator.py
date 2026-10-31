@@ -1,5 +1,6 @@
 from typing import List, Optional, Tuple
 from ..schemas.video import FrameResult, VideoFinalResult
+from ..config import settings
 from ..utils.logger import logger
 
 
@@ -46,7 +47,7 @@ class VideoAggregator:
         if self.verified_protocol == "mean_probability":
             avg_fake = sum(f.final_frame_score for f in frames) / len(frames)
             avg_real = 1.0 - avg_fake
-            verdict = "FAKE" if avg_fake >= 0.5 else "REAL"
+            verdict = "FAKE" if avg_fake >= settings.DECISION_THRESHOLD else "REAL"
             return (
                 VideoFinalResult(
                     verdict=verdict,
