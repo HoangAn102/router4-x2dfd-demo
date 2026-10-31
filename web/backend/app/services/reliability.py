@@ -13,6 +13,7 @@ from ..schemas.image import Reliability
 def assess_reliability(
     router_confidence: float,
     calibrated_score: float,
+    llava_on_template: bool = True,
 ) -> Reliability:
     reasons = []
 
@@ -31,6 +32,12 @@ def assess_reliability(
         reasons.append(
             "Điểm của chuyên gia được chọn gần mức trung tính "
             f"({calibrated_score:.2f}), gần như không cung cấp bằng chứng."
+        )
+
+    if not llava_on_template:
+        reasons.append(
+            "Mô hình ngôn ngữ không trả lời theo khuôn đã học; điểm được đọc tại vị trí nhãn "
+            "của câu trả lời mẫu (\"This image is …\")."
         )
 
     return Reliability(

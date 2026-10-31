@@ -152,7 +152,7 @@ class LiveModelWorker(BaseModelWorker):
                 score_direction="fake_probability",
             ),
             final=final_result,
-            reliability=assess_reliability(router_conf, calibrated_score),
+            reliability=assess_reliability(router_conf, calibrated_score, final_result.on_template),
             timing_ms={
                 "routing": round(t_route, 2),
                 "expert_inference": round(t_exp, 2),
@@ -365,6 +365,7 @@ class LiveModelWorker(BaseModelWorker):
                         reliability=assess_reliability(
                             row["router_confidence"],
                             calibrated,
+                            final_result.on_template,
                         ),
                     )
                 )
@@ -401,7 +402,7 @@ class LiveModelWorker(BaseModelWorker):
             final_frame_score=final_result.continuous_score,
             verdict=final_result.verdict,
             thumbnail_b64=None,
-            reliability=assess_reliability(router_conf, calibrated_score),
+            reliability=assess_reliability(router_conf, calibrated_score, final_result.on_template),
         )
 
     def aggregate_video(

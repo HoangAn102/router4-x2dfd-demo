@@ -71,11 +71,15 @@ def build_train_prompt(question):
     return conv.get_prompt()
 
 
-def _generate(question, model_path, model_base, max_new_tokens, with_scores, image_path=None):
+# Every SFT answer (router4_x2dfd_FINAL_CLEAN 24,000/24,000, V3 30,000/30,000) starts with this prefix and puts
+# the label right after it ("This image is real." / "This image is fake.").
+ANSWER_PREFIX = "This image is"
+
+
+def _prepare(question, model_path, model_base, image_path=None):
+    """Model, tokenizer, training-template input_ids and (only if the prompt has <image>) image kwargs."""
 
     _x2root()
-
-    import torch
 
     from llava.constants import IMAGE_TOKEN_INDEX
     from llava.mm_utils import tokenizer_image_token
@@ -109,6 +113,15 @@ def _generate(question, model_path, model_base, max_new_tokens, with_scores, ima
         return_tensors="pt",
     ).unsqueeze(0).to(model.device)
 
+    return tokenizer, model, input_ids, image_kwargs
+
+
+def _generate(question, model_path, model_base, max_new_tokens, with_scores, image_path=None):
+
+    import torch
+
+    tokenizer, model, input_ids, image_kwargs = _prepare(question, model_path, model_base, image_path)
+
     with torch.inference_mode():
         out = model.generate(
             input_ids,
@@ -125,60 +138,66 @@ def _generate(question, model_path, model_base, max_new_tokens, with_scores, ima
     return tokenizer, out
 
 
+def label_ids(tokenizer):
+    real_id = tokenizer.encode("real", add_special_tokens=False)
+    fake_id = tokenizer.encode("fake", add_special_tokens=False)
+    if len(real_id) != 1 or len(fake_id) != 1:
+        raise RuntimeError(f"real/fake are not single tokens: {real_id} {fake_id}")
+    return real_id[0], fake_id[0]
+
+
+def forced_readout(prefix_ids, prefix_argmax, label_argmax, real_logit, fake_logit, real_id, fake_id):
+    """Pairwise REAL/FAKE softmax at the position after the forced answer prefix.
+
+    on_template: greedy decoding would itself have produced the prefix and then a real/fake token, i.e. the
+    score equals X2DFD's "first generated real/fake token" read-out (X2DFD_CONTINUOUS_SCORE_V3). When it is
+    False the score is still defined (the label slot of the trained answer format); it is flagged, never raised.
+    """
+    import math
+
+    d = float(fake_logit) - float(real_logit)
+    fake = 1.0 / (1.0 + math.exp(-d)) if d >= 0 else math.exp(d) / (1.0 + math.exp(d))
+    on_template = list(prefix_argmax) == list(prefix_ids) and label_argmax in (real_id, fake_id)
+    return {
+        "real_score": round(1.0 - fake, 8),
+        "fake_score": round(fake, 8),
+        "on_template": bool(on_template),
+    }
+
+
 def score_with_train_prompt(question, *, model_path, model_base, max_new_tokens=4, image_path=None):
-    """REAL/FAKE pairwise softmax of the logits at the first generated real/fake token
-    (same read-out as X2DFD X2DFD_CONTINUOUS_SCORE_V3)."""
+    """Teacher-forced score: one forward pass over the training prompt + ANSWER_PREFIX, REAL/FAKE pairwise
+    softmax of the logits at the next position (the label slot of every SFT answer). Equal to the generate-based
+    read-out whenever greedy decoding follows the template (verified: R6 300 frames, score table); unlike it,
+    never fails when the LoRA drifts off-template (e.g. first token "ant", R6 31/10). max_new_tokens is unused
+    (kept for the worker protocol)."""
 
     import torch
 
-    tokenizer, out = _generate(
-        question,
-        model_path,
-        model_base,
-        max_new_tokens,
-        True,
-        image_path,
+    tokenizer, model, input_ids, image_kwargs = _prepare(question, model_path, model_base, image_path)
+    real_id, fake_id = label_ids(tokenizer)
+    prefix_ids = tokenizer(ANSWER_PREFIX, add_special_tokens=False).input_ids
+    m = len(prefix_ids)
+    ids = torch.cat([input_ids, torch.tensor([prefix_ids], device=input_ids.device)], dim=1)
+
+    with torch.inference_mode():
+        logits = model(input_ids=ids, attention_mask=torch.ones_like(ids), use_cache=False,
+                       **image_kwargs).logits[0, -m - 1:].float()
+
+    r = forced_readout(
+        prefix_ids,
+        [int(x) for x in logits[:m].argmax(-1)],
+        int(logits[m].argmax()),
+        logits[m, real_id],
+        logits[m, fake_id],
+        real_id,
+        fake_id,
     )
-
-    generated = out.sequences[0][-len(out.scores):].tolist()
-    answer = tokenizer.decode(generated, skip_special_tokens=True).strip()
-
-    real_id = tokenizer.encode("real", add_special_tokens=False)
-    fake_id = tokenizer.encode("fake", add_special_tokens=False)
-
-    if len(real_id) != 1 or len(fake_id) != 1:
-        raise RuntimeError(
-            f"real/fake are not single tokens: {real_id} {fake_id}"
-        )
-
-    real_id, fake_id = real_id[0], fake_id[0]
-
-    step = next(
-        (
-            i
-            for i, t in enumerate(generated)
-            if t in (real_id, fake_id)
-        ),
-        None,
-    )
-
-    if step is None:
-        raise RuntimeError(
-            "Generated response contains no real/fake token; "
-            f"answer={answer!r}"
-        )
-
-    logits = out.scores[step][0].float()
-    pair = torch.softmax(
-        torch.stack([logits[real_id], logits[fake_id]]),
-        dim=0,
-    )
-
+    label = "fake" if r["fake_score"] >= 0.5 else "real"
     return {
-        "answer": answer,
-        "label_step": step,
-        "real_score": round(float(pair[0]), 8),
-        "fake_score": round(float(pair[1]), 8),
+        "answer": f"{ANSWER_PREFIX} {label}",
+        "label_step": m,
+        **r,
     }
 
 
@@ -256,6 +275,8 @@ def _run_one(
                     result.get("real_score"),
                 "fake_score":
                     result.get("fake_score"),
+                "on_template":
+                    result.get("on_template"),
             }
 
         if mode == "explain":
