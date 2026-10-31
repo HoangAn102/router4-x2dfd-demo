@@ -5,7 +5,7 @@ DEV  : FFPP val (val_teacher_v2) + DFF val          (thresholds are chosen on DE
 Raw scores: stored v2 raws for FFPP test/val (passed parity, |diff| <= 2e-4), DFF from score_experts.py,
 CDF/DFDCP computed with the live wrappers (resumable, chunked).
 Systems filled here (no image LLaVA needed):
-  b        Router v2 + calibrator v2 + LoRA FINAL_CLEAN score table
+  b        Router v2 + calibrator v2 + LoRA FINAL_CLEAN score table (teacher-forced read-out)
   interim  Router v3 (D2) + calibrator D1 + score table
   plus the inputs of the image systems: V3_expert/V3_cal (calibrator V3), bold_cal (calibrator FINAL_CLEAN on the
   Router v2 choice, the pre-audit live configuration)
@@ -37,6 +37,7 @@ V2 = Path("/home/aiotlab/hoangan/outputs/router_teacher_v2")
 DFF = Path("/home/aiotlab/hoangan/datasets/DeepFakeFace_DFF")
 CAL_FINAL_CLEAN = "/home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/01_teacher/calibrators_FINAL_CLEAN.joblib"
 SC = [f"score_{e}" for e in EXPERTS]
+TABLE_TF = Path("/home/aiotlab/hoangan/eval_runs/root_fix/r6_full/tf_check/llava_score_table_tf.csv")  # check_tf_equivalence
 
 
 def build():
@@ -103,10 +104,13 @@ def main():
             save()
         df[f"{name}_cal"] = cal_selected(df, f"{name}_expert", joblib.load(calp)[key])
     df["bold_cal"] = cal_selected(df, "b_expert", joblib.load(CAL_FINAL_CLEAN)["experts"])
-    t = pd.read_csv(TABLE)
-    tab = {(al, f"{s:.3f}"): p for al, s, p in zip(t.alias, t.score_3dp, t.fake_prob)}
-    for name in ("b", "interim"):
-        df[f"{name}_fake"] = [tab[(e, f"{c:.3f}")] for e, c in zip(df[f"{name}_expert"], df[f"{name}_cal"])]
+    # (b)/(interim) LLaVA stage = score table of the web worker's read-out: teacher-forced since 31/10
+    # (TABLE_TF); the generate-based table (TABLE) is kept as *_fake_gen for the equivalence record.
+    for col, table_csv in (("_fake", TABLE_TF), ("_fake_gen", TABLE)):  # not `path`: save() writes to `path`
+        t = pd.read_csv(table_csv)
+        tab = {(al, f"{s:.3f}"): p for al, s, p in zip(t.alias, t.score_3dp, t.fake_prob)}
+        for name in ("b", "interim"):
+            df[f"{name}{col}"] = [tab[(e, f"{c:.3f}")] for e, c in zip(df[f"{name}_expert"], df[f"{name}_cal"])]
     save()
     rep = {f"{s}|{d}": dict(frames=int(len(g)), videos=int(g.video.nunique()),
                             routes={n: g[f"{n}_expert"].value_counts().to_dict() for n in SYS})

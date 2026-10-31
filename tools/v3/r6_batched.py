@@ -4,8 +4,11 @@ Every SFT answer (and every greedy answer seen so far) starts with the same word
 ("This image is real/fake"). The single-image path (generate, greedy, read logits at the first real/fake step) is
 therefore equal to ONE forward pass over prompt + that fixed prefix, reading the logits at the last position.
 This script does that forward for a batch of right-padded prompts (LLaVA's native padding), and checks per sample
-that the greedy argmax at every prefix position IS the forced token; samples that fail the check are re-scored
-with the original single-image function. `--verify N` first scores N frames with the single-image function, derives
+that the greedy argmax at every prefix position IS the forced token. V3 is DEFINED by this teacher-forced read-out
+(web worker score_with_train_prompt since 31/10): failing samples keep it, flagged "tf_offtemplate". For a/bold
+(author read-out) failing samples are re-scored with the author's single-image function; if that finds no
+real/fake token, the teacher-forced score is kept, flagged "offtemplate_tf". Unreadable images -> "error:" rows.
+Nothing raises past a frame. `--verify N` first scores N frames with the single-image function, derives
 the prefix from them and reports |delta fake_prob| between the two paths (mean, p99, max; logged in PROGRESS).
 
   V3    prompt = conv v1 (training template) via web/model_worker/x2dfd_worker_cli.build_train_prompt,
@@ -70,8 +73,11 @@ class Frames(torch.utils.data.Dataset):
 
     def __getitem__(self, i):
         path, question = self.rows[i]
-        img = Image.open(path).convert("RGB")
-        return path, question, process_images([img], self.proc, self.cfg)[0], img.size
+        try:
+            img = Image.open(path).convert("RGB")
+            return path, question, process_images([img], self.proc, self.cfg)[0], img.size
+        except Exception as e:  # unreadable image: recorded as an error row, never kills the job
+            return path, question, None, f"{type(e).__name__}: {e}"
 
 
 def main():
@@ -170,6 +176,7 @@ def main():
     if not meta.exists() or a.reverify:
         qmap = dict(zip(df.image_path, df.question))
         ds = Frames([(p, qmap[p]) for p in info["ref"]], proc, model.config)
+        assert all(ds[i][2] is not None for i in range(len(ds))), "unreadable verification image"
         got = [r for k in range(0, len(ds), a.bs) for r in score_batch([ds[i] for i in range(k, min(k + a.bs, len(ds)))])]
         torch.cuda.empty_cache()
         diffs = [abs(f - info["ref"][p]) for p, f, ok, _ in got]
@@ -196,21 +203,39 @@ def main():
     todo = df[~df.image_path.isin(done)].drop_duplicates("image_path")
     loader = torch.utils.data.DataLoader(Frames(list(zip(todo.image_path, todo.question)), proc, model.config),
                                          batch_size=a.bs, num_workers=a.workers, collate_fn=list)
-    t0, k, fb = time.time(), 0, 0
+    t0, k, fb, off = time.time(), 0, 0, 0
     with open(a.out, "a", newline="") as fh:
         w = csv.writer(fh)
         if not done:
             w.writerow(out_cols)
         for batch in loader:
-            for p, f, ok, question in score_batch(batch):
-                if not ok:
-                    f, fb = single(p, question)["fake_score"], fb + 1
-                w.writerow([p, f, "batched" if ok else "single"])
+            bad = [b for b in batch if b[2] is None]
+            for p, question, _, err in bad:
+                w.writerow([p, "", f"error:{err}"[:200]])
+                print("unreadable", p, err, flush=True)
+            for p, f, ok, question in score_batch([b for b in batch if b[2] is not None]) if len(bad) < len(batch) else []:
+                if a.system == "V3":
+                    # V3 is defined by the teacher-forced read-out (= x2dfd_worker_cli.score_with_train_prompt);
+                    # off-template answers keep the label-slot score and are flagged.
+                    path = "tf" if ok else "tf_offtemplate"
+                    off += not ok
+                elif ok:
+                    path = "batched"  # = the author's greedy read-out (prefix + label checked)
+                else:
+                    # the author's own single-image read-out; if it finds no real/fake token, fall back to the
+                    # teacher-forced label-slot score and flag it (never raise)
+                    try:
+                        f, path = single(p, question)["fake_score"], "single"
+                    except RuntimeError as e:
+                        path, off = "offtemplate_tf", off + 1
+                        print("offtemplate", p, str(e)[:120], flush=True)
+                    fb += 1
+                w.writerow([p, f, path])
             k += len(batch)
+            fh.flush()  # heartbeat for the watchdog (file mtime)
             if k % (a.bs * 50) < a.bs:
-                fh.flush()
-                print(f"{k}/{len(todo)} {k / (time.time() - t0):.1f} img/s fallback={fb}", flush=True)
-    print("done", k, "fallback", fb, flush=True)
+                print(f"{k}/{len(todo)} {k / (time.time() - t0):.1f} img/s fallback={fb} offtemplate={off}", flush=True)
+    print("done", k, "fallback", fb, "offtemplate", off, flush=True)
 
 
 if __name__ == "__main__":

@@ -62,6 +62,8 @@ def main():
                 r = W.score_with_train_prompt(q(e, s), model_path=a.lora_v3, model_base=BASE, max_new_tokens=4,
                                               image_path=str(grey))
                 table[(e, f"{s:.3f}")] = r["fake_score"]
+                if k % 200 == 0:
+                    print(e, k, flush=True)  # heartbeat for the R6 watchdog
         pd.DataFrame([dict(alias=e, score_3dp=s, fake_prob=p) for (e, s), p in table.items()]).to_csv(
             a.out.with_suffix(".table.csv"), index=False)
         df["V3_gray_fake"] = [table[(e, f"{c:.3f}")] for e, c in zip(df.V3_expert, df.V3_cal)]
