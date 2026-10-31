@@ -50,11 +50,17 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dir", type=Path, required=True)
     ap.add_argument("--n-boot", type=int, default=1000)
+    ap.add_argument("--exclude", type=Path, help="CSV image_path of TEST frames removed by the leak check (PREREG §6)")
     a = ap.parse_args()
     df = load(a.dir)
+    excluded = []
+    if a.exclude:
+        ex = set(pd.read_csv(a.exclude).image_path)
+        excluded = sorted(set(df.image_path[(df.split == "test") & df.image_path.isin(ex)]))
+        df = df[~((df.split == "test") & df.image_path.isin(ex))].reset_index(drop=True)
     systems = [s for s in SYSTEMS if f"{s}_fake" in df and df[f"{s}_fake"].notna().any()]
     dev, test = df[df.split == "dev"], df[df.split == "test"]
-    rep = {"systems": systems, "coverage": {s: {ds: float(g[f"{s}_fake"].notna().mean())
+    rep = {"excluded_test_frames": excluded, "systems": systems, "coverage": {s: {ds: float(g[f"{s}_fake"].notna().mean())
                                                 for ds, g in df.groupby("dataset")} for s in systems}}
     thr = {}
     for s in systems:
