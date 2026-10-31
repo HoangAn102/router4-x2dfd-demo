@@ -99,8 +99,10 @@ def test_video_aggregator_unverified_returns_none_and_blocked():
     assert "unverified" in error_msg.lower()
 
 
-def test_video_aggregator_verified_mean_protocol():
-    """Verify aggregation calculation when verified protocol is provided."""
+def test_video_aggregator_verified_mean_protocol(monkeypatch):
+    """Verify aggregation calculation when verified protocol is provided (cut = settings.DECISION_THRESHOLD)."""
+    from web.backend.app.config import settings
+    monkeypatch.setattr(settings, "DECISION_THRESHOLD", 0.5)
     agg = VideoAggregator(verified_protocol="mean_probability")
     mock_frames = [
         FrameResult(
@@ -128,3 +130,5 @@ def test_video_aggregator_verified_mean_protocol():
     assert final_res.fake_probability == 0.7  # (0.8 + 0.6) / 2
     assert final_res.real_probability == 0.3
     assert final_res.continuous_score == 0.7
+    monkeypatch.setattr(settings, "DECISION_THRESHOLD", 0.74908721)
+    assert agg.aggregate(mock_frames)[0].verdict == "REAL"  # 0.7 < DEV threshold of lineage (b)
