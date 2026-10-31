@@ -74,6 +74,9 @@ export default function ImageResultCard({ result }) {
             <span>Phân Tích Lý Luận Từ Mô Hình Đa Phương Thức (LLaVA Reasoning)</span>
           </div>
           <p className="explanation-body">{explanation}</p>
+          {result.final.explanation_consistent === false && (
+            <p className="explanation-note">Lời giải thích không nhất quán với kết luận.</p>
+          )}
           {result.provenance?.llava_uses_image === 'false' && (
             <p className="explanation-note">
               Văn bản do mô hình ngôn ngữ sinh dựa trên điểm chuyên gia; mô hình không phân tích trực tiếp ảnh.

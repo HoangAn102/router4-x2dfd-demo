@@ -2,6 +2,7 @@ import asyncio
 import json
 import math
 import os
+import re
 
 from pathlib import Path
 from typing import Any, Optional, Tuple
@@ -60,6 +61,18 @@ class X2DFDClient:
             f"{calibrated_score:.3f}."
         )
 
+
+    @staticmethod
+    def explanation_label(text: Optional[str]) -> Optional[str]:
+        """REAL/FAKE stated in the explanation's first sentence ("This image is real. ..."), else None.
+
+        Used only to flag an explanation that contradicts the score verdict; the text itself is never changed.
+        """
+        if not text:
+            return None
+        first = re.split(r"(?<=[.!?])\s|\n", text.strip(), maxsplit=1)[0]
+        found = {w.upper() for w in re.findall(r"\b(real|fake)\b", first, flags=re.IGNORECASE)}
+        return found.pop() if len(found) == 1 else None
 
     @staticmethod
     def validate_scores(
@@ -436,6 +449,12 @@ class X2DFDClient:
                     exc,
                 )
 
+        # R7: the verdict always comes from the score; a contradicting explanation is only flagged (FE note).
+        exp_label = self.explanation_label(explanation)
+        explanation_consistent = None if exp_label is None else exp_label == verdict
+        if explanation_consistent is False:
+            logger.warning("X2DFD explanation says %s, score verdict %s", exp_label, verdict)
+
         logger.info(
             "FINAL X2DFD: "
             "real=%.8f fake=%.8f verdict=%s",
@@ -455,4 +474,5 @@ class X2DFDClient:
             on_template=on_template,
 
             explanation=explanation,
+            explanation_consistent=explanation_consistent,
         )
