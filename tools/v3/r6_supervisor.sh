@@ -2,7 +2,10 @@
 # R6 (full) supervisor: runs the stages one after another (one LLaVA job at a time, ~16 GB VRAM).
 # Watchdog: a stage whose watched files (output + log) have not changed for STALL_SEC (default 15 min) is
 # killed (its own process group only), the stall is written to PROGRESS.md and the stage is restarted; every
-# stage resumes from what it already wrote. A stage that exits non-zero is restarted the same way (max 5 tries).
+# stage resumes from what it already wrote (max TRIES stalls). A stage that EXITS with an error is not retried
+# (a config/code error repeats; it must be fixed first): it is marked failed in PROGRESS.md, the next
+# (independent) stages still run, and the supervisor exits 1 at the end. Stages already done (.rc_NAME = 0)
+# are skipped, so re-running the supervisor after a fix only redoes what is missing.
 # Stages are tracked by PID / exit-code files, never by pgrep on command lines.
 #   setsid nohup tools/v3/r6_supervisor.sh > $R/supervisor.log 2>&1 < /dev/null &
 set -u
@@ -24,6 +27,7 @@ newest() { local m=0 t; for f in "$@"; do t=$(stat -c %Y "$f" 2>/dev/null || ech
 run_stage() {
     local name=$1 watch=$2; shift 2
     local rc_file="$R/.rc_$name" try pgid start rc
+    if [ "$(cat "$rc_file" 2>/dev/null)" = "0" ]; then log "skip $name (already done)"; return 0; fi
     for try in $(seq 1 "$TRIES"); do
         rm -f "$rc_file"
         log "start $name (try $try)"
@@ -44,12 +48,18 @@ run_stage() {
         done
         rc=$(cat "$rc_file")
         if [ "$rc" = "0" ]; then log "done $name"; return 0; fi
-        [ "$rc" != "stalled" ] && note "$name thoát mã $rc (lần $try) → chạy lại từ chỗ dở. Log cuối: $(grep -E 'Error|error|Traceback' ${watch##* } 2>/dev/null | tail -2 | tr '\n' ' ' | tail -c 250)"
+        if [ "$rc" != "stalled" ]; then
+            note "$name THẤT BẠI (thoát mã $rc, không phải treo) → không chạy lại; sửa nguyên nhân rồi chạy lại supervisor (phần đã xong được bỏ qua/resume). Lỗi: $(grep -E 'Error|error|Traceback' ${watch##* } 2>/dev/null | tail -2 | tr '\n' ' ' | tail -c 250)"
+            FAILED="$FAILED $name"
+            return 1
+        fi
         sleep $((POLL / 2 + 1))
     done
-    note "$name thất bại $TRIES lần — dừng chuỗi, cần xem log."
-    exit 1
+    note "$name treo $TRIES lần — bỏ stage, cần xem log."
+    FAILED="$FAILED $name"
+    return 1
 }
+FAILED=""
 
 [ -n "${R6_SUPERVISOR_LIB:-}" ] && return 0  # sourced by the test: functions only
 echo $$ > "$R/supervisor.pid"
@@ -64,4 +74,5 @@ run_stage V3_gray "$R/results_V3_gray.log" \
     "$PY -u tools/v3/r6_llava.py --frames $F --system V3_gray --lora-v3 $L --out $R/results_V3_gray.csv >> $R/results_V3_gray.log 2>&1"
 run_stage tf_existing "$R/tf_check/tf_existing_full.log" \
     "$PY -u tools/v3/check_tf_equivalence.py --part existing --n 0 --src $R/results_V3.pre_crash_59788.csv --tag _all59788 --out $R/tf_check >> $R/tf_check/tf_existing_full.log 2>&1"
+if [ -n "$FAILED" ]; then note "chuỗi R6 kết thúc, stage thất bại:$FAILED"; exit 1; fi
 note "chuỗi R6 xong (V3, a, bold, V3_gray, kiểm TF 59.788 dòng)."

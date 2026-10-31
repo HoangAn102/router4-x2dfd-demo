@@ -23,6 +23,7 @@ the prefix from them and reports |delta fake_prob| between the two paths (mean, 
 import argparse
 import csv
 import json
+import os
 import re
 import sys
 import time
@@ -96,6 +97,11 @@ def main():
     a = ap.parse_args()
 
     lora = a.lora or (LORA_AUTHOR if a.system == "a" else LORA_FC)
+    if a.system == "a":
+        # the author adapter's config names its vision tower relative to the X2DFD root
+        # ("weights/base/clip-vit-large-patch14-336"); eval.infer.runner runs from there too
+        a.frames, a.out, a.questions = a.frames.resolve(), a.out.resolve(), a.questions.resolve()
+        os.chdir("/home/aiotlab/hoangan/projects/X2DFD")
     df = pd.read_csv(a.frames)
     df = df[df.split.isin(a.splits.split(","))]
     if a.system == "V3":
