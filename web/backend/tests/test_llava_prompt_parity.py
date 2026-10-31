@@ -14,6 +14,7 @@ from web.model_worker.x2dfd_client import X2DFDClient
 
 SFT_JSON = Path("/home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/04_sft/"
                 "router4_x2dfd_FINAL_CLEAN_SFT.json")
+V3_SFT_JSON = Path("/home/aiotlab/hoangan/outputs/ROUTER4_V3_20261030/05_sft/router4_x2dfd_V3_SFT.json")
 BASE_LLAVA = Path("/home/aiotlab/hoangan/projects/X2DFD/weights/base/llava-v1.5-7b")
 HAS_LLAVA = importlib.util.find_spec("llava") is not None and importlib.util.find_spec("transformers") is not None
 
@@ -82,6 +83,64 @@ class TokenParityTests(unittest.TestCase):
             live = tokenizer_image_token(build_train_prompt(conv[0]["value"]), tok, IMAGE_TOKEN_INDEX)
             self.assertEqual(live, train_prompt)
             self.assertEqual(live.count(IMAGE_TOKEN_INDEX), 1)
+
+
+@unittest.skipUnless(HAS_LLAVA and V3_SFT_JSON.exists() and BASE_LLAVA.exists(), "needs X2DFD env + artifacts")
+class ExplainParityTests(unittest.TestCase):
+    """R7 (1): the explanation (LoRA V3) is generated from exactly the training prompt ids (conv v1, one <image>),
+    not through X2DFD single_image_infer (which picks llava_v0 from the adapter dir name and adds <im_start>)."""
+
+    def test_explain_input_ids_equal_v3_training_prompt(self):
+        from unittest import mock
+
+        import torch
+        import transformers
+        from llava import conversation as conv_lib
+        from llava.train import train as T
+
+        sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "model_worker"))
+        import x2dfd_worker_cli as W
+        W._x2root()  # puts the X2DFD root on sys.path
+        from utils import lora_inference as LI
+
+        tok = transformers.AutoTokenizer.from_pretrained(str(BASE_LLAVA), use_fast=False, model_max_length=2048,
+                                                         padding_side="right")
+        tok.pad_token = tok.unk_token
+        T.conversation_lib.default_conversation = conv_lib.conv_templates["v1"]
+
+        class DA:
+            is_multimodal = True
+            mm_use_im_start_end = False
+
+        seen = {}
+
+        class FakeModel:
+            device = torch.device("cpu")
+            config = None
+
+            def parameters(self):
+                return iter([torch.zeros(1, dtype=torch.float16)])
+
+            def generate(self, input_ids, **kw):
+                seen["ids"], seen["kw"] = input_ids[0].tolist(), kw
+                return mock.Mock(sequences=torch.tensor([[tok.convert_tokens_to_ids("▁This")]]))
+
+        import tempfile
+        from PIL import Image
+        with tempfile.TemporaryDirectory() as d:
+            img = Path(d) / "x.png"
+            Image.new("RGB", (64, 64), (10, 20, 30)).save(img)
+            with mock.patch.object(LI, "_get_or_load_model", return_value=(tok, FakeModel(), None, None)), \
+                    mock.patch("llava.mm_utils.process_images", return_value=torch.zeros(1, 3, 336, 336)):
+                for it in json.load(open(V3_SFT_JSON))[:20]:
+                    out = T.preprocess(T.preprocess_multimodal(copy.deepcopy([it["conversations"]]), DA()), tok,
+                                       has_image=True)
+                    ids, labels = out["input_ids"][0], out["labels"][0]
+                    train_prompt = ids[:int((labels != -100).nonzero()[0])].tolist()
+                    W.explain_with_train_prompt(it["conversations"][0]["value"], model_path="V3", model_base="b",
+                                                image_path=str(img))
+                    self.assertEqual(seen["ids"], train_prompt)
+                    self.assertIn("images", seen["kw"])  # image features are fed, as in training
 
 
 if __name__ == "__main__":

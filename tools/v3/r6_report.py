@@ -35,6 +35,9 @@ def load(d):
         if f.exists():
             r = pd.read_csv(f).drop_duplicates("image_path").set_index("image_path")[f"{s}_fake"]
             df[f"{s}_fake"] = df.image_path.map(r)
+            m = pd.read_csv(f).drop_duplicates("image_path")
+            if f"{s}_path" in m:
+                df.attrs.setdefault("paths", {})[s] = m[f"{s}_path"].fillna("").astype(str).value_counts().to_dict()
     for f in d.glob("author_out_*.json"):  # eval.infer.runner outputs, if run directly
         rows = [dict(path=p) for p in df.image_path]
         B.read_author(f, rows)
@@ -61,6 +64,11 @@ def main():
             thr[s] = dict(t_dev=t, dev_at_05=S.rates(g.label, g[f"{s}_fake"], 0.5),
                           dev_at_t=S.rates(g.label, g[f"{s}_fake"], t))
     rep["thresholds"] = thr
+    rep["scoring_paths"] = df.attrs.get("paths", {})
+    # web rule (user, 31/10): move off 0.5 only if DEV FPR falls and DEV recall falls by <= 2 points
+    for s, t in thr.items():
+        d5, dt = t["dev_at_05"], t["dev_at_t"]
+        t["web_rule_change"] = bool(dt["fpr_real"] < d5["fpr_real"] and d5["recall_fake"] - dt["recall_fake"] <= 0.02)
 
     per = {}
     for ds in TEST:
@@ -84,6 +92,12 @@ def main():
                for ds in TEST if "V3" in per[ds]["rates"]}
         rep["gate_R6"] = dict(ffpp_delta_pts=ffpp, better_on=better, fpr_delta_pts=fpr,
                               passed=bool(ffpp >= -0.5 and len(better) >= 2 and all(v <= 1 for v in fpr.values())))
+    if "V3_gray_fake" in df and "V3_fake" in df:  # does the LoRA use the image? same prompt, grey image
+        g = df[df.split == "test"]
+        rep["V3_vs_gray"] = {ds: dict(mean_abs_diff=float((x.V3_fake - x.V3_gray_fake).abs().mean()),
+                                      verdict_agree=float(((x.V3_fake >= .5) == (x.V3_gray_fake >= .5)).mean()),
+                                      corr=float(np.corrcoef(x.V3_fake, x.V3_gray_fake)[0, 1]))
+                             for ds, x in g.groupby("dataset")}
     (a.dir / "R6_report.json").write_text(json.dumps(rep, indent=1, default=float))
 
     lines = ["| Hệ | Tập | frame AUC [95% CI] | video AUC [95% CI] | acc/FPR/recall @0.5 | @t_dev |", "|---|---|---|---|---|---|"]
