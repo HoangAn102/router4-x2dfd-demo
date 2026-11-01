@@ -99,7 +99,8 @@ def main():
     rates = {}
     for ds in TABLE_SETS:
         g = df[df.dataset == ds]
-        rates[ds] = {s: {"@0.5": S.rates(g.label, g[s], 0.5), "@t_dev": S.rates(g.label, g[s], thr[s])}
+        rates[ds] = {s: {"@0.5": S.rates(g.label, g[s], 0.5),
+                         **({"@t_dev": S.rates(g.label, g[s], thr[s])} if s in thr else {})}  # Router4 cũ: no DEV
                      for s in systems + (["R4old"] if g.R4old.notna().all() else [])}
     rep["rates"] = rates
 
