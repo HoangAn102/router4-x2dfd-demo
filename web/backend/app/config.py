@@ -61,21 +61,25 @@ class Settings(BaseSettings):
     GPU_LOCK_FILE: Path = Path("gpu.lock")
 
     # Artifact & Checkpoint Paths (Verified from runtime_context & source_snapshot)
-    ROUTER_CHECKPOINT: str = "/home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/02_router/final_checkpoint/best.pt"
+    # Lineage V3 (deployed 01/11 by the project owner after R6; rollback = tag final-interim = lineage (b)).
+    ROUTER_CHECKPOINT: str = "/home/aiotlab/hoangan/outputs/ROUTER4_V3_20261030/03_router/run_effb0_4domain_V3/best.pt"
     # The calibrator that produced the scores in the LoRA's SFT prompts. The FINAL_CLEAN SFT json is a byte copy
     # of ROUTER4_NATIVE_X2DFD_24K_20260915 (sha 05814535…), whose scores come from router_teacher_v2
     # (median |diff| <= 0.002 vs 0.011-0.047 for calibrators_FINAL_CLEAN.joblib; audit 2026-10-30, AUDIT.md P3).
-    CALIBRATORS_PATH: str = "/home/aiotlab/hoangan/outputs/router_teacher_v2/calibrators_train_only.joblib"
-    ROUTER4_LORA_DIR: str = "/home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/05_lora/router4_x2dfd_FINAL_CLEAN"
+    # V3: calibrators_V3.joblib produced the V3 SFT prompt scores. Lineage (b): router_teacher_v2/calibrators_train_only.joblib.
+    CALIBRATORS_PATH: str = "/home/aiotlab/hoangan/outputs/ROUTER4_V3_20261030/01_calibrators/calibrators_V3.joblib"
+    ROUTER4_LORA_DIR: str = "/home/aiotlab/hoangan/outputs/ROUTER4_V3_20261030/06_lora/router4_x2dfd_V3_full30k"
     BASE_LLAVA_DIR: str = "/home/aiotlab/hoangan/projects/X2DFD/weights/base/llava-v1.5-7b"
     # Whether the LoRA's SFT prompts carried "<image>" (i.e. LLaVA actually looks at the face crop).
     # router4_x2dfd_FINAL_CLEAN: False (0/24,000 SFT prompts had the token; audit 2026-10-30).
-    LORA_PROMPT_HAS_IMAGE: bool = False
+    # router4_x2dfd_V3_full30k: True (30,000/30,000 SFT prompts start with "<image>\n").
+    LORA_PROMPT_HAS_IMAGE: bool = True
     # FAKE when the LLaVA fake probability >= this. Changed only from a DEV-chosen value (FFPP val + DFF val,
     # never test) that lowers dev FPR while recall drops <= 2 points (ROOT_FIX_PLAN R6.4, PREREG §4).
     # R6 (31/10): lineage (b) above -> Youden t_dev 0.74908721 (dev FPR 0.145 -> 0.129, recall 0.764 -> 0.752).
-    # Lineage V3 keeps 0.5 (its t_dev 0.461 raises dev FPR): set DECISION_THRESHOLD=0.5 when switching to V3.
-    DECISION_THRESHOLD: float = 0.74908721
+    # V3: t_dev 0.4610168 (dev FPR 0.117 -> 0.124, recall 0.871 -> 0.880); the PREREG rule would keep 0.5, the
+    # project owner chose t_dev on 01/11 (REPORT "Sai lệch so với đăng ký trước"). Lineage (b): 0.74908721.
+    DECISION_THRESHOLD: float = 0.4610168
 
     # Python Execution Wrappers (Verified from runtime_clean_v2)
     X2PYTHON_BIN: str = "/home/aiotlab/hoangan/outputs/ROUTER4_FINAL_CLEAN_RETRAIN_20260919/06_crossdata_benchmark/PAPER_FINAL_2CROSS_CDF_DFDCP/runtime_clean_v2/x2python"

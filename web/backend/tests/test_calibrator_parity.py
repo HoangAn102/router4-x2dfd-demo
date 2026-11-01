@@ -36,12 +36,29 @@ class CalibratorBundleTests(unittest.TestCase):
         self.assertAlmostEqual(ec.calibrate("blending", 1.0), 0.8)
 
     def test_default_is_the_sft_calibrator(self):
-        self.assertTrue(settings.CALIBRATORS_PATH.endswith("router_teacher_v2/calibrators_train_only.joblib"))
+        # deployed lineage V3 (01/11): the calibrator that wrote the V3 SFT prompt scores, with the V3 LoRA
+        self.assertTrue(settings.CALIBRATORS_PATH.endswith("ROUTER4_V3_20261030/01_calibrators/calibrators_V3.joblib"))
+        self.assertTrue(settings.ROUTER4_LORA_DIR.endswith("ROUTER4_V3_20261030/06_lora/router4_x2dfd_V3_full30k"))
 
 
-@unittest.skipUnless(Path(settings.CALIBRATORS_PATH).exists(), "server artifact not present")
+CAL_B = "/home/aiotlab/hoangan/outputs/router_teacher_v2/calibrators_train_only.joblib"
+CAL_V3 = "/home/aiotlab/hoangan/outputs/ROUTER4_V3_20261030/01_calibrators/calibrators_V3.joblib"
+
+
+@unittest.skipUnless(Path(CAL_V3).exists(), "server artifact not present")
+class LiveCalibratorReproducesV3SftScores(unittest.TestCase):
+    def test_known_v3_sft_rows(self):
+        # (expert, raw score from 02_teacher/train_teacher_V3.csv, score printed in router4_x2dfd_V3_SFT.json)
+        rows = [("diffusion", 0.0106221856549382, 0.577), ("blending", 0.0028837039135396, 0.543),
+                ("frequency", 1.0, 0.795), ("texture", 0.99968159198761, 1.0)]
+        ec = ExpertClient(CAL_V3)
+        for expert, raw, sft in rows:
+            self.assertLess(abs(ec.calibrate(expert, raw) - sft), 0.005, expert)
+
+
+@unittest.skipUnless(Path(CAL_B).exists(), "server artifact not present")
 class LiveCalibratorReproducesSftScores(unittest.TestCase):
-    def test_known_sft_rows(self):
+    def test_known_sft_rows(self):  # lineage (b)
         # (expert, raw score, score printed in the SFT prompt), rows of
         # TRAIN24K_QC_20260914/train24k_manifest.csv. calibrators_FINAL_CLEAN gives 0.677/0.734/0.500/0.820.
         rows = [
@@ -50,6 +67,6 @@ class LiveCalibratorReproducesSftScores(unittest.TestCase):
             ("texture", 6.904064662194287e-07, 0.291),
             ("blending", 0.8189746737480164, 0.856),
         ]
-        ec = ExpertClient()
+        ec = ExpertClient(CAL_B)
         for expert, raw, sft in rows:
             self.assertLess(abs(ec.calibrate(expert, raw) - sft), 0.005, expert)

@@ -22,7 +22,7 @@ def _verdict(tmp_path, monkeypatch, threshold, fake):
 
 
 def test_default_threshold_is_r6_dev_choice(tmp_path, monkeypatch):
-    assert settings.DECISION_THRESHOLD == 0.74908721  # R6 PREREG §4, lineage (b)
+    assert settings.DECISION_THRESHOLD == 0.4610168  # R6 DEV t_dev of the deployed lineage V3
     assert _verdict(tmp_path, monkeypatch, 0.5, 0.5) == ("FAKE", 0.5)
     assert _verdict(tmp_path, monkeypatch, 0.5, 0.4999) == ("REAL", 0.5)
 

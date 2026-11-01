@@ -3,13 +3,17 @@ from web.model_worker.router_client import ALIASES, EXPERTS, RouterClient
 from web.model_worker.x2dfd_client import FinalScoreUnavailableError, X2DFDClient
 
 
-def test_wfs_prompt_builder():
+def test_wfs_prompt_builder(monkeypatch):
+    from web.backend.app.config import settings
     client = X2DFDClient()
+    monkeypatch.setattr(settings, "LORA_PROMPT_HAS_IMAGE", False)  # lineage (b)
     prompt = client.build_wfs_prompt("Frequency", 0.812)
     assert prompt == "\nIs this image real or fake? And the frequency score is 0.812."
 
     prompt_blend = client.build_wfs_prompt("Blending", 0.054)
     assert prompt_blend == "\nIs this image real or fake? And the blending score is 0.054."
+    monkeypatch.setattr(settings, "LORA_PROMPT_HAS_IMAGE", True)  # lineage V3 (deployed)
+    assert client.build_wfs_prompt("Diffusion", 0.5) == "<image>\nIs this image real or fake? And the diffusion score is 0.500."
 
 
 def test_x2dfd_validate_scores_rejections():
