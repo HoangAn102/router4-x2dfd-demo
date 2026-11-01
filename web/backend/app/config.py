@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     # Previously 0.38, the threshold the team used in
     # source_snapshot/final_clean_integration/03_wfs/patched_route_test_locked038.py
     ROUTER_LOW_CONFIDENCE: float = 0.30
+    # "none": Router top-1 (V3-P0). "low_conf_blending": top-1 confidence < ROUTER_LOW_CONFIDENCE -> Blending
+    # (V3-P1, PREREG_E2 §5; enable only if its deploy rule is met). Router confidence itself is reported unchanged.
+    ROUTER_FALLBACK_POLICY: Literal["none", "low_conf_blending"] = "none"
     # Disabled: calibrated floors (blending 0.45, texture 0.56) sit inside 0.4-0.6,
     # so this flagged 51% of REAL val images (152/300). Keep 0.0 unless re-validated.
     EXPERT_NEUTRAL_BAND: float = 0.0

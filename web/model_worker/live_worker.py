@@ -165,6 +165,10 @@ class LiveModelWorker(BaseModelWorker):
                 "lora_adapter": Path(settings.ROUTER4_LORA_DIR).name,
                 "calibrators": Path(settings.CALIBRATORS_PATH).name,
                 "llava_uses_image": str(settings.LORA_PROMPT_HAS_IMAGE).lower(),
+                "router_policy": settings.ROUTER_FALLBACK_POLICY,
+                "router_fallback_applied": str(
+                    bool((getattr(self.router_client, "last_route_diagnostics", None) or {}).get("fallback_applied"))
+                ).lower(),
             }
         )
 
