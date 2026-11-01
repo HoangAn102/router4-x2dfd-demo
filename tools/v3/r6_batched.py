@@ -93,6 +93,8 @@ def main():
     ap.add_argument("--workers", type=int, default=6)
     ap.add_argument("--verify", type=int, default=64)
     ap.add_argument("--verify-only", action="store_true")
+    ap.add_argument("--single", action="store_true",
+                    help="score every frame with the single-image function (reference path; slow); no batching")
     ap.add_argument("--verify-random", action="store_true",
                     help="verify on a seed-0 random sample of frames (default: the first frames of each dataset)")
     ap.add_argument("--reverify", action="store_true", help="re-run the batched-vs-single comparison (cached refs)")
@@ -206,12 +208,36 @@ def main():
         # fp16 noise between incremental (KV-cache) decoding and one prefill pass: unbiased, largest near p~0.5-0.8.
         # Criterion (logged, revised after the 60-frame check gave max 0.006 at bs 16): every verdict equal,
         # mean |delta| <= 1e-3 and p99 |delta| <= 5e-3; max |delta| is reported.
-        if info["mean_abs_diff"] > 1e-3 or info["p99_abs_diff"] > 5e-3 or info["verdict_agree"] != len(got):
+        if (info["mean_abs_diff"] > 1e-3 or info["p99_abs_diff"] > 5e-3 or info["verdict_agree"] != len(got)) \
+                and not a.single:
             raise SystemExit("batched read-out does not match the single-image path; not used")
 
     # 2) all frames, resumable
     done = set(pd.read_csv(a.out).image_path) if a.out.exists() else set()
     todo = df[~df.image_path.isin(done)].drop_duplicates("image_path")
+    if a.single:  # reference path for every frame; off-template -> teacher-forced label-slot score, flagged
+        t0, k, off = time.time(), 0, 0
+        with open(a.out, "a", newline="") as fh:
+            w = csv.writer(fh)
+            if not done:
+                w.writerow(out_cols)
+            for r in todo.itertuples():
+                try:
+                    f, path = single(r.image_path, r.question)["fake_score"], "single"
+                except RuntimeError as e:
+                    item = Frames([(r.image_path, r.question)], proc, model.config)[0]
+                    f, path, off = score_batch([item])[0][1], "offtemplate_tf", off + 1
+                    print("offtemplate", r.image_path, str(e)[:120], flush=True)
+                except (OSError, ValueError) as e:
+                    f, path = "", f"error:{e}"[:200]
+                w.writerow([r.image_path, f, path])
+                k += 1
+                if k % 50 == 0:
+                    fh.flush()
+                if k % 1000 == 0:
+                    print(f"{k}/{len(todo)} {k / (time.time() - t0):.1f} img/s single offtemplate={off}", flush=True)
+        print("done", k, "single offtemplate", off, flush=True)
+        return
     loader = torch.utils.data.DataLoader(Frames(list(zip(todo.image_path, todo.question)), proc, model.config),
                                          batch_size=a.bs, num_workers=a.workers, collate_fn=list)
     t0, k, fb, off = time.time(), 0, 0, 0
