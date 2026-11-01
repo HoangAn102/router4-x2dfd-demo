@@ -20,8 +20,11 @@ HAS_LLAVA = importlib.util.find_spec("llava") is not None and importlib.util.fin
 
 
 class PromptStringTests(unittest.TestCase):
-    def test_no_image_token_and_leading_newline(self):
-        p = X2DFDClient.build_wfs_prompt("Texture", 1.0)
+    def test_no_image_token_and_leading_newline(self):  # lineage (b): LoRA FINAL_CLEAN
+        from unittest import mock
+        from web.backend.app.config import settings
+        with mock.patch.object(settings, "LORA_PROMPT_HAS_IMAGE", False):
+            p = X2DFDClient.build_wfs_prompt("Texture", 1.0)
         self.assertEqual(p, "\nIs this image real or fake? And the texture score is 1.000.")
         self.assertNotIn("<image>", p)
 
@@ -35,10 +38,22 @@ class PromptStringTests(unittest.TestCase):
     @unittest.skipUnless(SFT_JSON.exists(), "SFT json not on this machine")
     def test_matches_sft_human_turns(self):
         import re
+        from unittest import mock
+        from web.backend.app.config import settings
         items = json.load(open(SFT_JSON))[:500]
-        for it in items:
+        for it in items:  # lineage (b)
             human = it["conversations"][0]["value"]
             alias, score = re.fullmatch(r"\nIs this image real or fake\? And the (\w+) score is ([0-9.]+)\.",
+                                        human).groups()
+            with mock.patch.object(settings, "LORA_PROMPT_HAS_IMAGE", False):
+                self.assertEqual(X2DFDClient.build_wfs_prompt(alias.title(), float(score)), human)
+
+    @unittest.skipUnless(V3_SFT_JSON.exists(), "V3 SFT json not on this machine")
+    def test_default_prompt_matches_v3_sft_human_turns(self):  # deployed lineage V3 (default settings)
+        import re
+        for it in json.load(open(V3_SFT_JSON))[:500]:
+            human = it["conversations"][0]["value"]
+            alias, score = re.fullmatch(r"<image>\nIs this image real or fake\? And the (\w+) score is ([0-9.]+)\.",
                                         human).groups()
             self.assertEqual(X2DFDClient.build_wfs_prompt(alias.title(), float(score)), human)
 
