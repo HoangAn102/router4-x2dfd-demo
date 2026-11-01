@@ -93,6 +93,8 @@ def main():
     ap.add_argument("--workers", type=int, default=6)
     ap.add_argument("--verify", type=int, default=64)
     ap.add_argument("--verify-only", action="store_true")
+    ap.add_argument("--verify-random", action="store_true",
+                    help="verify on a seed-0 random sample of frames (default: the first frames of each dataset)")
     ap.add_argument("--reverify", action="store_true", help="re-run the batched-vs-single comparison (cached refs)")
     a = ap.parse_args()
 
@@ -137,7 +139,10 @@ def main():
     if meta.exists():
         info = json.loads(meta.read_text())
     else:
-        ref = pd.concat([g.head(max(1, a.verify // df.dataset.nunique())) for _, g in df.groupby("dataset")])
+        if a.verify_random:  # E2 (a) DFDC: the first 64 frames came from ~3 videos (see PROGRESS 01/11 17:00)
+            ref = df.sample(n=min(a.verify, len(df)), random_state=0)
+        else:
+            ref = pd.concat([g.head(max(1, a.verify // df.dataset.nunique())) for _, g in df.groupby("dataset")])
         prefixes, ref_scores = set(), {}
         for r in ref.itertuples():
             res = single(r.image_path, r.question)
