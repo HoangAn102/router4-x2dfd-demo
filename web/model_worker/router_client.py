@@ -103,6 +103,11 @@ class RouterClient:
             }
 
         selected_expert = EXPERTS[top1_idx]
+        # E2 policy P1 (PREREG_E2): a low-confidence route falls back to the Blending expert. Off by default.
+        if settings.ROUTER_FALLBACK_POLICY == "low_conf_blending" and top1_conf < settings.ROUTER_LOW_CONFIDENCE:
+            selected_expert = "blending"
+        self.last_route_diagnostics["fallback_applied"] = selected_expert != EXPERTS[top1_idx]
+        self.last_route_diagnostics["final_expert"] = selected_expert
         selected_alias = ALIASES[selected_expert]
 
         logger.info(
